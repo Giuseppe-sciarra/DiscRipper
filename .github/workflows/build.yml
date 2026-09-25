@@ -1,14 +1,19 @@
-name: Build DiscRipper
+name: Build & Release DiscRipper
+
+# Ogni push su main (o avvio manuale) = build + test + release automatica.
+# Versione: 1.0.<numero build>, tag v1.0.<numero build> creato dalla Action stessa.
 
 on:
   push:
     branches: [ main ]
-    tags: [ 'v*' ]
-  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -23,15 +28,17 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Test algoritmi (disc ID, AccurateRip, lettura sicura)
-        run: dotnet run -c Release --project tests/DiscRipper.Tests/DiscRipper.Tests.csproj
-
       - name: Versione
         id: ver
         shell: pwsh
         run: |
-          if ($env:GITHUB_REF -like 'refs/tags/v*') { $v = $env:GITHUB_REF_NAME.TrimStart('v') } else { $v = "1.0.0" }
+          $v = "1.0.${{ github.run_number }}"
           "version=$v" >> $env:GITHUB_OUTPUT
+          "tag=v$v" >> $env:GITHUB_OUTPUT
+          Write-Host "Versione $v"
+
+      - name: Test algoritmi (disc ID, AccurateRip, lettura sicura)
+        run: dotnet run -c Release --project tests/DiscRipper.Tests/DiscRipper.Tests.csproj
 
       - name: Publish (self-contained, file singolo)
         run: >
@@ -59,11 +66,20 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: DiscRipper-win-x64
+          name: DiscRipper-${{ steps.ver.outputs.version }}-win-x64
           path: DiscRipper-*.zip
 
       - name: Release
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: DiscRipper ${{ steps.ver.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          make_latest: true
+          body: |
+            DiscRipper ${{ steps.ver.outputs.version }} — build automatica da `${{ github.sha }}`.
+
+            **Installazione:** scompatta lo zip in una cartella e avvia `DiscRipper.exe` (ffmpeg.exe è già incluso, non serve installare .NET).
+
+            Ultima modifica: ${{ github.event.head_commit.message }}
           files: DiscRipper-*.zip
