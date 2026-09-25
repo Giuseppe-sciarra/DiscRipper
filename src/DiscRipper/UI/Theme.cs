@@ -144,7 +144,9 @@ public static class Theme
                 if (c.Tag as string == "surface") c.BackColor = P.Surface;
                 else if (c.Parent is Card || c.Parent?.Tag as string == "surface" || IsInsideSurface(c)) c.BackColor = P.Surface;
                 else c.BackColor = P.Back;
-                c.ForeColor = P.Text; break;
+                c.ForeColor = P.Text;
+                if (c is ScrollableControl { AutoScroll: true }) ScrollTheme(c);
+                break;
         }
     }
 
@@ -169,13 +171,13 @@ public static class Theme
         g.DefaultCellStyle.SelectionBackColor = P.Selection;
         g.DefaultCellStyle.SelectionForeColor = P.Text;
         g.DefaultCellStyle.Font = Base;
-        g.DefaultCellStyle.Padding = new Padding(4, 0, 4, 0);
+        g.DefaultCellStyle.Padding = Ui.P(4, 0, 4, 0);
         g.AlternatingRowsDefaultCellStyle.BackColor = IsDark ? Color.FromArgb(35, 37, 43) : Color.FromArgb(249, 250, 252);
         g.ColumnHeadersDefaultCellStyle.BackColor = P.Surface;
         g.ColumnHeadersDefaultCellStyle.ForeColor = P.TextDim;
         g.ColumnHeadersDefaultCellStyle.SelectionBackColor = P.Surface;
         g.ColumnHeadersDefaultCellStyle.Font = Bold;
-        g.ColumnHeadersDefaultCellStyle.Padding = new Padding(4, 0, 4, 0);
+        g.ColumnHeadersDefaultCellStyle.Padding = Ui.P(4, 0, 4, 0);
         ScrollTheme(g);
         foreach (Control sc in g.Controls) ScrollTheme(sc);
     }

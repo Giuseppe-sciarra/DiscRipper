@@ -19,7 +19,7 @@ public sealed class SettingsForm : Form
     readonly ThemedCombo _theme = new();
     readonly ThemedCombo _speed = new();
     readonly ThemedCombo _retries = new();
-    readonly FieldBox _offset = new() { Width = 90, TextAlign = HorizontalAlignment.Center };
+    readonly FieldBox _offset = new() { Width = Ui.S(90), TextAlign = HorizontalAlignment.Center };
     readonly FlatButton _detect = new() { Text = "Rileva ora", Icon = Glyph.Search };
     readonly Label _offsetInfo = new() { AutoSize = true, Tag = "dim", Font = Theme.Small };
     readonly ThemedCheckBox _paranoia = new() { Text = "Paranoia sempre (doppia lettura di ogni traccia)", KeepWidth = true };
@@ -85,34 +85,38 @@ public sealed class SettingsForm : Form
         _s = s; _drive = drive; _toc = toc; _ar = ar;
         Text = "Impostazioni";
         Font = Theme.Base;
-        AutoScaleMode = AutoScaleMode.Dpi;
+        AutoScaleMode = AutoScaleMode.None; // misure già scalate a mano (Ui.S)
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(780, 820);
+        var wa = Screen.FromPoint(Cursor.Position).WorkingArea;
+        ClientSize = new Size(Math.Min(Ui.S(760), wa.Width - 40), Math.Min(Ui.S(820), wa.Height - 80));
 
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Padding = new Padding(18) };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Padding = Ui.P(18) };
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, Ui.S(58)));
         Controls.Add(root);
 
-        var card = new Card { Dock = DockStyle.Fill, AutoScroll = true, Padding = new Padding(22, 16, 22, 16), Margin = new Padding(0) };
+        // la card resta ferma, scorre solo il pannello interno (niente bordi "fantasma" durante lo scroll)
+        var card = new Card { Dock = DockStyle.Fill, Padding = Ui.P(6, 12, 4, 12), Margin = new Padding(0) };
+        var scroller = new Panel { Dock = DockStyle.Fill, AutoScroll = true, Tag = "surface", Margin = new Padding(0), Padding = Ui.P(16, 4, 16, 4) };
         var t = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 1, Tag = "surface", Margin = new Padding(0) };
-        card.Controls.Add(t);
+        scroller.Controls.Add(t);
+        card.Controls.Add(scroller);
         root.Controls.Add(card, 0, 0);
 
         void Add(Control c, int h)
         {
             c.Dock = DockStyle.Fill;
-            t.RowStyles.Add(new RowStyle(SizeType.Absolute, h));
+            t.RowStyles.Add(new RowStyle(SizeType.Absolute, Ui.S(h)));
             t.Controls.Add(c, 0, t.RowCount++);
         }
         void Section(string title, bool first = false)
         {
-            var l = new Label { Text = title, Font = Theme.Big, AutoSize = true, Tag = "accent", Margin = new Padding(0) };
-            var holder = new Panel { Tag = "surface", Margin = new Padding(0) };
-            l.Location = new Point(0, first ? 0 : 18);
+            var l = new Label { Text = title, Font = Theme.Big, AutoSize = true, Tag = "accent", Margin = Ui.P(0) };
+            var holder = new Panel { Tag = "surface", Margin = Ui.P(0) };
+            l.Location = new Point(0, first ? 0 : Ui.S(18));
             holder.Controls.Add(l);
             Add(holder, first ? 32 : 46);
         }
@@ -125,15 +129,16 @@ public sealed class SettingsForm : Form
         const int NoteW = 480; // larghezza usata per calcolare l'altezza (il testo va a capo da solo)
         Label Note(string text)
         {
-            var l = new Label { Text = text, AutoSize = false, Dock = DockStyle.Fill, Tag = "dim", Font = Theme.Small, Margin = new Padding(0, 0, 0, 0) };
-            int h = TextRenderer.MeasureText(text, Theme.Small, new Size(NoteW, 0), TextFormatFlags.WordBreak).Height + 8;
+            var l = new Label { Text = text, AutoSize = false, Dock = DockStyle.Fill, Tag = "dim", Font = Theme.Small, Margin = Ui.P(0, 0, 0, 0) };
+            int px = TextRenderer.MeasureText(text, Theme.Small, new Size(Ui.S(NoteW), 0), TextFormatFlags.WordBreak).Height;
+            int h = (int)Math.Ceiling(px / Ui.Scale) + 8; // misura a 100%, Ui.Row la riscala
             var row = Ui.Row(h, (Spacer(LabelW), SizeType.Absolute, LabelW), (l, SizeType.Percent, 100));
             Add(row, h);
             return l;
         }
         void Check(ThemedCheckBox cb)
         {
-            cb.Width = 520;
+            cb.Width = Ui.S(500);
             Add(Ui.Row(34, (Spacer(LabelW), SizeType.Absolute, LabelW), (cb, SizeType.Percent, 100)), 34);
         }
 
@@ -159,9 +164,9 @@ public sealed class SettingsForm : Form
         Note("Quante volte rileggere un punto del disco che dà risultati diversi prima di arrendersi.");
         Field("Velocità di lettura", _speed);
         _offset.Anchor = AnchorStyles.Left;
-        var offRow = Ui.Row(Ui.RowH, (_offset, SizeType.AutoSize, 0), (Spacer(8), SizeType.AutoSize, 0), (_detect, SizeType.AutoSize, 0), (new Panel { Margin = new Padding(0) }, SizeType.Percent, 100));
+        var offRow = Ui.Row(Ui.RowH, (_offset, SizeType.AutoSize, 0), (Spacer(8), SizeType.AutoSize, 0), (_detect, SizeType.AutoSize, 0), (new Panel { Margin = Ui.P(0) }, SizeType.Percent, 100));
         Field("Offset del lettore", offRow);
-        _offsetInfo.AutoSize = false; _offsetInfo.Dock = DockStyle.Fill; _offsetInfo.Margin = new Padding(0);
+        _offsetInfo.AutoSize = false; _offsetInfo.Dock = DockStyle.Fill; _offsetInfo.Margin = Ui.P(0);
         Add(Ui.Row(44, (Spacer(LabelW), SizeType.Absolute, LabelW), (_offsetInfo, SizeType.Percent, 100)), 44);
 
         Section("Riconoscimento del disco");
@@ -176,9 +181,9 @@ public sealed class SettingsForm : Form
         Check(_log);
         Add(new Panel { Tag = "surface" }, 8);
 
-        var ok = new FlatButton { Text = "Salva", Accent = true, DialogResult = DialogResult.OK, Width = 130 };
-        var cancel = new FlatButton { Text = "Annulla", DialogResult = DialogResult.Cancel, Width = 130 };
-        var buttons = Ui.Row(58, (new Panel { Margin = new Padding(0) }, SizeType.Percent, 100), (cancel, SizeType.AutoSize, 0), (Spacer(10), SizeType.AutoSize, 0), (ok, SizeType.AutoSize, 0));
+        var ok = new FlatButton { Text = "Salva", Accent = true, DialogResult = DialogResult.OK, Width = Ui.S(130) };
+        var cancel = new FlatButton { Text = "Annulla", DialogResult = DialogResult.Cancel, Width = Ui.S(130) };
+        var buttons = Ui.Row(58, (new Panel { Margin = Ui.P(0) }, SizeType.Percent, 100), (cancel, SizeType.AutoSize, 0), (Spacer(10), SizeType.AutoSize, 0), (ok, SizeType.AutoSize, 0));
         buttons.Tag = null;
         root.Controls.Add(buttons, 0, 1);
         AcceptButton = ok; CancelButton = cancel;
@@ -224,7 +229,7 @@ public sealed class SettingsForm : Form
         Theme.Apply(this);
     }
 
-    static Control Spacer(int w) => new Panel { Width = w, Height = 1, Margin = new Padding(0) };
+    static Control Spacer(int w) => new Panel { Width = Ui.S(w), Height = 1, Margin = new Padding(0) };
 
     static int Nearest(int[] values, int v)
     {

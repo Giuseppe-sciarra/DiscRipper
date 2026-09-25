@@ -7,23 +7,43 @@ namespace DiscRipper.UI;
 /// <summary>Altezze standard: tutti i controlli di una riga sono alti uguali e centrati.</summary>
 public static class Ui
 {
-    public const int H = 34;       // campi, combo, pulsanti
-    public const int RowH = 42;    // altezza riga dei form
-    public const int Radius = 10;     // pulsanti e campi
-    public const int CardRadius = 16; // card
+    /// <summary>Fattore di scala dello schermo (1 = 100%, 1.5 = 150%...). Tutte le misure sono pensate a 100%.</summary>
+    public static float Scale { get; private set; } = 1f;
 
-    /// <summary>Riga a colonne con altezza fissa: ogni controllo viene centrato verticalmente.</summary>
+    public static void Init()
+    {
+        try
+        {
+            using var g = Graphics.FromHwnd(IntPtr.Zero);
+            Scale = Math.Max(1f, g.DpiX / 96f);
+        }
+        catch { Scale = 1f; }
+    }
+
+    /// <summary>Converte una misura "a 100%" in pixel reali.</summary>
+    public static int S(float v) => (int)Math.Round(v * Scale);
+    public static float Sf(float v) => v * Scale;
+    public static Padding P(int all) => new(S(all));
+    public static Padding P(int l, int t, int r, int b) => new(S(l), S(t), S(r), S(b));
+    public static Size Sz(int w, int h) => new(S(w), S(h));
+
+    public static int H => S(34);           // campi, combo, pulsanti (pixel reali)
+    public const int RowH = 42;             // altezza riga dei form (misura a 100%)
+    public static int Radius => S(10);      // pulsanti e campi
+    public static int CardRadius => S(16);  // card
+
+    /// <summary>Riga a colonne con altezza fissa (misure a 100%): ogni controllo viene centrato verticalmente.</summary>
     public static TableLayoutPanel Row(int height, params (Control c, SizeType type, float size)[] cols)
     {
         var t = new TableLayoutPanel
         {
             Dock = DockStyle.Fill, ColumnCount = cols.Length, RowCount = 1, Margin = new Padding(0), Padding = new Padding(0),
-            Height = height, Tag = "surface"
+            Height = S(height), Tag = "surface"
         };
-        t.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
+        t.RowStyles.Add(new RowStyle(SizeType.Absolute, S(height)));
         for (int i = 0; i < cols.Length; i++)
         {
-            t.ColumnStyles.Add(new ColumnStyle(cols[i].type, cols[i].size));
+            t.ColumnStyles.Add(new ColumnStyle(cols[i].type, cols[i].type == SizeType.Absolute ? S(cols[i].size) : cols[i].size));
             var c = cols[i].c;
             if (c.Dock == DockStyle.None)
                 c.Anchor = cols[i].type == SizeType.AutoSize ? AnchorStyles.Left : AnchorStyles.Left | AnchorStyles.Right;
@@ -34,7 +54,7 @@ public static class Ui
 
     public static Label Caption(string text, int rightMargin = 10) => new()
     {
-        Text = text, AutoSize = true, Tag = "dim", Anchor = AnchorStyles.Left, Margin = new Padding(0, 0, rightMargin, 0)
+        Text = text, AutoSize = true, Tag = "dim", Anchor = AnchorStyles.Left, Margin = new Padding(0, 0, S(rightMargin), 0)
     };
 }
 
@@ -44,7 +64,7 @@ public class Card : Panel
     public Card()
     {
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.UserPaint, true);
-        Padding = new Padding(16);
+        Padding = Ui.P(16);
     }
 
     protected override void OnPaintBackground(PaintEventArgs e)
@@ -90,9 +110,9 @@ public class FlatButton : Button, IThemed
     public void FitWidth()
     {
         if (Dock is DockStyle.Fill or DockStyle.Top or DockStyle.Bottom) return;
-        int w = TextRenderer.MeasureText(Text, Font).Width + 28;
-        if (Icon != Glyph.None) w += Text.Length > 0 ? 24 : 12;
-        Width = Math.Max(w, Text.Length == 0 ? Height : 92);
+        int w = TextRenderer.MeasureText(Text, Font).Width + Ui.S(28);
+        if (Icon != Glyph.None) w += Text.Length > 0 ? Ui.S(24) : Ui.S(12);
+        Width = Math.Max(w, Text.Length == 0 ? Height : Ui.S(92));
     }
 
     public void ApplyTheme() => Invalidate();
@@ -128,19 +148,19 @@ public class FlatButton : Button, IThemed
         }
         if (Focused && ShowFocusCues && Enabled)
         {
-            using var path = Theme.Rounded(Rectangle.Inflate(r, -2, -2), Ui.Radius - 2);
+            using var path = Theme.Rounded(Rectangle.Inflate(r, -Ui.S(2), -Ui.S(2)), Ui.Radius - Ui.S(2));
             using var pen = new Pen(Color.FromArgb(120, Accent ? p.AccentText : p.Accent)) { DashStyle = DashStyle.Dot };
             g.DrawPath(pen, path);
         }
 
         var textSize = TextRenderer.MeasureText(Text, Font);
-        int iconW = Icon == Glyph.None ? 0 : 16;
-        int gap = Icon != Glyph.None && Text.Length > 0 ? 8 : 0;
+        int iconW = Icon == Glyph.None ? 0 : Ui.S(16);
+        int gap = Icon != Glyph.None && Text.Length > 0 ? Ui.S(8) : 0;
         int total = iconW + gap + (Text.Length > 0 ? textSize.Width : 0);
         int x = (Width - total) / 2;
         if (Icon != Glyph.None)
         {
-            DrawGlyph(g, Icon, new Rectangle(x, (Height - 16) / 2, 16, 16), fore);
+            DrawGlyph(g, Icon, new Rectangle(x, (Height - iconW) / 2, iconW, iconW), fore);
             x += iconW + gap;
         }
         if (Text.Length > 0)
@@ -148,12 +168,22 @@ public class FlatButton : Button, IThemed
                 TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
     }
 
+    /// <summary>Icone disegnate in una griglia 16×16 e scalate al rettangolo richiesto.</summary>
     public static void DrawGlyph(Graphics g, Glyph glyph, Rectangle r, Color c)
     {
         g.SmoothingMode = SmoothingMode.AntiAlias;
+        var state = g.Save();
+        g.TranslateTransform(r.X, r.Y);
+        g.ScaleTransform(r.Width / 16f, r.Height / 16f);
+        try { DrawGlyph16(g, glyph, c); }
+        finally { g.Restore(state); }
+    }
+
+    static void DrawGlyph16(Graphics g, Glyph glyph, Color c)
+    {
         using var pen = new Pen(c, 1.7f) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
         using var br = new SolidBrush(c);
-        float x = r.X, y = r.Y, w = r.Width, h = r.Height;
+        float x = 0, y = 0, w = 16, h = 16;
         float cx = x + w / 2, cy = y + h / 2;
         switch (glyph)
         {
@@ -204,7 +234,7 @@ public class FlatButton : Button, IThemed
                 g.DrawLines(pen, new[] { new PointF(x + 1.5f, y + 10), new PointF(x + 1.5f, y + h - 1.5f), new PointF(x + w - 1.5f, y + h - 1.5f), new PointF(x + w - 1.5f, y + 10) });
                 break;
             case Glyph.Stop:
-                using (var path = Theme.Rounded(new Rectangle((int)x + 3, (int)y + 3, (int)w - 6, (int)h - 6), 2))
+                using (var path = Theme.Rounded(new Rectangle(3, 3, 10, 10), 2))
                     g.FillPath(br, path);
                 break;
         }
@@ -223,7 +253,7 @@ public class FieldBox : UserControl, IThemed
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
         Height = Ui.H;
         Margin = new Padding(0);
-        Padding = new Padding(10, 0, 10, 0);
+        Padding = Ui.P(10, 0, 10, 0);
         Cursor = Cursors.IBeam;
         Box.Font = Theme.Base;
         Controls.Add(Box);
@@ -322,7 +352,7 @@ public class ThemedCombo : ComboBox, IThemed
         if (e.Index >= 0)
         {
             var txt = GetItemText(Items[e.Index]);
-            var r = e.Bounds; r.X += edit ? 8 : 10; r.Width -= edit ? 36 : 12;
+            var r = e.Bounds; r.X += Ui.S(edit ? 8 : 10); r.Width -= Ui.S(edit ? 36 : 12);
             TextRenderer.DrawText(e.Graphics, txt, Font, r, Enabled ? p.Text : p.TextDim,
                 TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
         }
@@ -352,13 +382,13 @@ public class ThemedCombo : ComboBox, IThemed
             g.FillRegion(bg, outside);
         }
         // zona freccia (copre il pulsante nativo, ritagliata dentro il bordo arrotondato)
-        var arrow = new Rectangle(Width - 32, 0, 32, Height);
+        var arrow = new Rectangle(Width - Ui.S(32), 0, Ui.S(32), Height);
         g.SetClip(path);
         using (var ab = new SolidBrush(p.Surface2)) g.FillRectangle(ab, arrow);
         g.ResetClip();
         float cx = arrow.X + arrow.Width / 2f, cy = Height / 2f;
-        using (var ap = new Pen(Enabled ? p.TextDim : p.Border, 1.8f) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round })
-            g.DrawLines(ap, new[] { new PointF(cx - 4.5f, cy - 2), new PointF(cx, cy + 2.5f), new PointF(cx + 4.5f, cy - 2) });
+        using (var ap = new Pen(Enabled ? p.TextDim : p.Border, Ui.Sf(1.8f)) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round })
+            g.DrawLines(ap, new[] { new PointF(cx - Ui.Sf(4.5f), cy - Ui.Sf(2)), new PointF(cx, cy + Ui.Sf(2.5f)), new PointF(cx + Ui.Sf(4.5f), cy - Ui.Sf(2)) });
         // bordo
         bool active = Focused || DroppedDown;
         using var pen = new Pen(active ? p.Accent : _hover && Enabled ? p.TextDim : p.Border, active ? 1.6f : 1f);
@@ -387,7 +417,7 @@ public class CoverBox : Control, IThemed
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.InterpolationMode = InterpolationMode.HighQualityBicubic;
         var r = new Rectangle(0, 0, Width - 1, Height - 1);
-        using var path = Theme.Rounded(r, 12);
+        using var path = Theme.Rounded(r, Ui.S(12));
         if (_image != null)
         {
             // adatta mantenendo le proporzioni (riempie il riquadro)
@@ -423,7 +453,7 @@ public class ThemedCheckBox : CheckBox, IThemed
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
         Font = Theme.Base;
         AutoSize = false;
-        Height = 26;
+        Height = Ui.S(26);
         Cursor = Cursors.Hand;
         Padding = new Padding(0);
     }
@@ -437,10 +467,33 @@ public class ThemedCheckBox : CheckBox, IThemed
     {
         if (KeepWidth) return;
         var sz = TextRenderer.MeasureText(Text, Font);
-        Width = sz.Width + 30;
+        Width = sz.Width + Ui.S(32);
     }
 
     public void ApplyTheme() { BackColor = Color.Transparent; ForeColor = Theme.P.Text; Invalidate(); }
+
+    /// <summary>Casella di spunta arrotondata (usata anche nella tabella tracce).</summary>
+    public static void DrawCheck(Graphics g, Rectangle r, bool on, bool enabled)
+    {
+        var p = Theme.P;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        using var path = Theme.Rounded(r, Math.Max(3, r.Width * 5 / 18));
+        if (on)
+        {
+            using var b = new SolidBrush(enabled ? p.Accent : p.TextDim);
+            g.FillPath(b, path);
+            float k = r.Width / 18f;
+            using var pen = new Pen(p.AccentText, 2f * k) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
+            g.DrawLines(pen, new[] { new PointF(r.X + 4.5f * k, r.Y + 9f * k), new PointF(r.X + 8f * k, r.Y + 12.5f * k), new PointF(r.X + 13.5f * k, r.Y + 5.5f * k) });
+        }
+        else
+        {
+            using var b = new SolidBrush(p.Surface2);
+            g.FillPath(b, path);
+            using var pen = new Pen(p.Border, 1.4f * r.Width / 18f);
+            g.DrawPath(pen, path);
+        }
+    }
 
     protected override void OnPaint(PaintEventArgs e)
     {
@@ -448,26 +501,10 @@ public class ThemedCheckBox : CheckBox, IThemed
         var g = e.Graphics;
         g.Clear(Parent?.BackColor ?? p.Back);
         g.SmoothingMode = SmoothingMode.AntiAlias;
-        int box = 18;
+        int box = Ui.S(18);
         var r = new Rectangle(1, (Height - box) / 2, box, box);
-        using (var path = Theme.Rounded(r, 5))
-        {
-            if (Checked)
-            {
-                using var b = new SolidBrush(Enabled ? p.Accent : p.TextDim);
-                g.FillPath(b, path);
-                using var pen = new Pen(p.AccentText, 2f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
-                g.DrawLines(pen, new[] { new Point(r.X + 4, r.Y + 9), new Point(r.X + 8, r.Y + 13), new Point(r.X + 14, r.Y + 5) });
-            }
-            else
-            {
-                using var b = new SolidBrush(p.Surface2);
-                g.FillPath(b, path);
-                using var pen = new Pen(p.Border, 1.4f);
-                g.DrawPath(pen, path);
-            }
-        }
-        var tr = new Rectangle(box + 9, 0, Width - box - 9, Height);
+        DrawCheck(g, r, Checked, Enabled);
+        var tr = new Rectangle(box + Ui.S(9), 0, Width - box - Ui.S(9), Height);
         TextRenderer.DrawText(g, Text, Font, tr, Enabled ? p.Text : p.TextDim,
             TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
     }
@@ -482,7 +519,7 @@ public class FlatProgress : Control, IThemed
     public FlatProgress()
     {
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
-        Height = 8;
+        Height = Ui.S(8);
     }
 
     public void ApplyTheme() => Invalidate();
@@ -493,15 +530,16 @@ public class FlatProgress : Control, IThemed
         var g = e.Graphics;
         g.Clear(Parent?.BackColor ?? p.Back);
         g.SmoothingMode = SmoothingMode.AntiAlias;
-        int y = (Height - 8) / 2;
-        var r = new Rectangle(0, y, Width - 1, 7);
-        using (var path = Theme.Rounded(r, 4))
+        int bh = Ui.S(7), rad = Math.Max(2, bh / 2);
+        int y = (Height - bh) / 2;
+        var r = new Rectangle(0, y, Width - 1, bh);
+        using (var path = Theme.Rounded(r, rad))
         using (var b = new SolidBrush(p.Surface2))
             g.FillPath(b, path);
         int w = (int)((Width - 1) * _value);
-        if (w >= 8)
+        if (w >= bh)
         {
-            using var path = Theme.Rounded(new Rectangle(0, y, w, 7), 4);
+            using var path = Theme.Rounded(new Rectangle(0, y, w, bh), rad);
             using var b = new SolidBrush(p.Accent);
             g.FillPath(b, path);
         }
