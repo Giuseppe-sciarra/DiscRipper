@@ -180,6 +180,47 @@ ReaderTest();
     var m = GnuDbClient.ParseXmcd(x, toc)!;
     Check("xmcd", m.Artist == "Pino Daniele" && m.Album == "Nero a metà" && m.Year == "1980" && m.Tracks[1].Artist == "Ospite" && m.Tracks[1].Title == "Quanno chiove");
 }
+
+// ---- CUETools DB (MusicBrainz + Discogs + freedb) e unione dei risultati
+{
+    int[] off = { 0, 15537, 31691, 50866, 66466, 81202, 99409, 115920, 133093, 149847, 161560, 177682, 207106 };
+    var toc = Toc.Build(off.Select((o, i) => (i + 1, o, i < 12)), 210385);
+    Check("CTDB toc", CueToolsDbClient.TocString(toc) == "0:15537:31691:50866:66466:81202:99409:115920:133093:149847:161560:177682:-207106:210385", CueToolsDbClient.TocString(toc));
+    var res = CueToolsDbClient.Parse(File.ReadAllText(Dir("ctdb_ladyhawke.xml")), toc);
+    Check("CTDB parse", res.Count >= 3 && res.All(r => r.Tracks.Count == 12) && res.Any(r => r.Source == "freedb") && res.Any(r => r.Source == "MusicBrainz"),
+        string.Join(", ", res.Select(r => r.Source + ":" + r.Tracks.Count)));
+    Check("CTDB titoli", res.All(r => r.Tracks[0].Title.Equals("Magic", StringComparison.OrdinalIgnoreCase) && r.Tracks[11].Title.Equals("Morning Dreams", StringComparison.OrdinalIgnoreCase)));
+    Check("CTDB copertina", res.Any(r => r.CoverUrl != null));
+    // doppioni: la stessa release MusicBrainz arriva sia diretta sia da CTDB
+    var dup = new AlbumMeta { Source = "MusicBrainz", ProviderId = res.First(r => r.Source == "MusicBrainz").ProviderId, Artist = "Ladyhawke", Album = "Ladyhawke", ExactMatch = true };
+    var merged = MetadataMerge.Merge(new[] { dup }.Concat(res));
+    Check("Merge senza doppioni", merged.Count(m => m.ProviderId == dup.ProviderId) == 1 && merged[0] == dup, merged.Count.ToString());
+    Check("Merge genere preso da altro risultato", merged.Where(m => m.Source == "MusicBrainz").All(m => m.Genre.Length > 0), string.Join("|", merged.Select(m => m.Source + "=" + m.Genre)));
+}
+// ---- impostazioni: salvataggio e rilettura
+{
+    var path = Path.Combine(Path.GetTempPath(), "drtest-settings", "settings.json");
+    try { File.Delete(path); } catch { }
+    AppSettings.PathOverride = path;
+    var a = new AppSettings
+    {
+        OutputRoot = @"\\nas\musica", Formats = OutputFormat.Mp3 | OutputFormat.Flac, Mp3Quality = "CBR 320", FlacLevel = 5,
+        AacBitrate = 192, OggQuality = 8, OpusBitrate = 96, Theme = ThemeMode.Scuro, ParanoiaAlways = true, MaxRetries = 40,
+        ReadSpeed = 8, GnuDbEmail = "x@y.it", AutoReadOnInsert = false, EjectWhenDone = false, SaveCoverJpg = false, WriteLog = false,
+        LastDrive = "E", WindowBounds = new[] { 10, 20, 1300, 900 }, WindowMaximized = true
+    };
+    a.DriveOffsets["TSSTcorp BDDVDW SE-506BB"] = 6;
+    a.Save();
+    var b = AppSettings.Load();
+    bool ok = b.OutputRoot == a.OutputRoot && b.Formats == a.Formats && b.Mp3Quality == "CBR 320" && b.FlacLevel == 5 && b.AacBitrate == 192
+              && b.OggQuality == 8 && b.OpusBitrate == 96 && b.Theme == ThemeMode.Scuro && b.ParanoiaAlways && b.MaxRetries == 40 && b.ReadSpeed == 8
+              && b.GnuDbEmail == "x@y.it" && !b.AutoReadOnInsert && !b.EjectWhenDone && !b.SaveCoverJpg && !b.WriteLog && b.LastDrive == "E"
+              && b.WindowBounds!.SequenceEqual(new[] { 10, 20, 1300, 900 }) && b.WindowMaximized
+              && b.GetOffset("tsstcorp bddvdw se-506bb") == (6, true);
+    Check("Impostazioni salvate e riaperte", ok, File.ReadAllText(path));
+    AppSettings.PathOverride = null;
+}
+
 // ---- nomi file
 {
     Check("Clean", PathBuilder.Clean("AC/DC: Live? <1992>") == "AC-DC- Live_ (1992)", PathBuilder.Clean("AC/DC: Live? <1992>"));
@@ -249,6 +290,16 @@ if (args.Contains("--online"))
         Console.WriteLine($"     AccurateRip Ladyhawke: {(ar == null ? "non trovato" : ar.Pressings.Count + " stampe")}");
     }
     catch (Exception ex) { Console.WriteLine("     AccurateRip non raggiungibile: " + ex.Message); }
+
+    try
+    {
+        int[] o3 = { 0, 15213, 32164, 46442, 63264, 80339 };
+        var t3 = Toc.Build(o3.Select((o, i) => (i + 1, o, true)), 95312);
+        var ct = await new CueToolsDbClient(http).LookupAsync(t3, CancellationToken.None);
+        Check("CUETools DB live", ct.Count > 0, ct.Count.ToString());
+        foreach (var r in ct) Console.WriteLine("     " + r.Display + " | cover: " + (r.CoverUrl ?? "-"));
+    }
+    catch (Exception ex) { Console.WriteLine("     CUETools DB non raggiungibile: " + ex.Message); }
 }
 
 Console.WriteLine(fails == 0 ? "\nTUTTI I TEST OK" : $"\n{fails} TEST FALLITI");

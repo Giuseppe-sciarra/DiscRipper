@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Xml.Linq;
 
 namespace DiscRipper.Core;
 
@@ -84,6 +85,7 @@ public sealed class MusicBrainzClient
             {
                 Source = "MusicBrainz",
                 MbReleaseId = Str(rel, "id"),
+                ProviderId = Str(rel, "id"),
                 Album = Str(rel, "title"),
                 Artist = Credit(rel),
                 MbAlbumArtistId = FirstArtistId(rel),
@@ -178,6 +180,7 @@ public sealed class MusicBrainzClient
     {
         foreach (var url in new[]
                  {
+                     a.CoverUrl,
                      a.MbReleaseId != null ? $"https://coverartarchive.org/release/{a.MbReleaseId}/front-500" : null,
                      a.MbReleaseGroupId != null ? $"https://coverartarchive.org/release-group/{a.MbReleaseGroupId}/front-500" : null
                  })
@@ -281,4 +284,122 @@ public sealed class GnuDbClient
         }
         return m;
     }
+}
+
+/// <summary>
+/// CUETools DB (db.cuetools.net): gratuito, senza account. Con una sola richiesta interroga
+/// MusicBrainz, Discogs e freedb e restituisce anche le copertine.
+/// </summary>
+public sealed class CueToolsDbClient
+{
+    readonly HttpClient _http;
+    static readonly XNamespace Ns = "http://db.cuetools.net/ns/mmd-1.0#";
+
+    public CueToolsDbClient(HttpClient http) => _http = http;
+
+    public static string TocString(Toc toc) =>
+        string.Join(':', toc.Tracks.Select(t => (t.IsAudio ? "" : "-") + t.StartLba)) + ":" + toc.LeadoutLba;
+
+    public async Task<List<AlbumMeta>> LookupAsync(Toc toc, CancellationToken ct)
+    {
+        string url = $"http://db.cuetools.net/lookup2.php?version=3&ctdb=0&fuzzy=1&metadata=extensive&toc={TocString(toc)}";
+        string xml = await _http.GetStringAsync(url, ct).ConfigureAwait(false);
+        return Parse(xml, toc);
+    }
+
+    public static List<AlbumMeta> Parse(string xml, Toc toc)
+    {
+        var result = new List<AlbumMeta>();
+        if (string.IsNullOrWhiteSpace(xml)) return result;
+        var doc = XDocument.Parse(xml);
+        var audio = toc.AudioTracks;
+        foreach (var m in doc.Root?.Elements(Ns + "metadata") ?? Enumerable.Empty<XElement>())
+        {
+            string A(string n) => ((string?)m.Attribute(n) ?? "").Trim();
+            string src = A("source").ToLowerInvariant();
+            var meta = new AlbumMeta
+            {
+                Source = src switch { "musicbrainz" => "MusicBrainz", "discogs" => "Discogs", "freedb" => "freedb", _ => src.Length > 0 ? src : "CTDB" },
+                ProviderId = A("id"),
+                Artist = A("artist"),
+                Album = A("album"),
+                Year = A("year") is { Length: >= 4 } y ? y[..4] : "",
+                Genre = A("genre"),
+                Barcode = A("barcode"),
+                Format = "CD",
+                DiscNumber = int.TryParse(A("discnumber"), out var dn) && dn > 0 ? dn : 1,
+                DiscTotal = int.TryParse(A("disccount"), out var dc) && dc > 0 ? dc : 1,
+                ExactMatch = !int.TryParse(A("relevance"), out var rel) || rel >= 100
+            };
+            if (meta.DiscNumber > meta.DiscTotal) meta.DiscTotal = meta.DiscNumber;
+            if (src == "musicbrainz" && Guid.TryParse(meta.ProviderId, out _)) meta.MbReleaseId = meta.ProviderId;
+            var release = m.Element(Ns + "release");
+            if (release != null)
+            {
+                meta.Country = ((string?)release.Attribute("country") ?? "").Trim();
+                if (meta.Year.Length == 0 && ((string?)release.Attribute("date") ?? "") is { Length: >= 4 } d) meta.Year = d[..4];
+            }
+            var label = m.Element(Ns + "label");
+            if (label != null) meta.Label = ((string?)label.Attribute("name") ?? "").Trim();
+            var cover = m.Elements(Ns + "coverart").OrderByDescending(c => (string?)c.Attribute("primary") == "1").FirstOrDefault();
+            if (cover != null) meta.CoverUrl = (string?)cover.Attribute("uri");
+
+            var tracks = m.Elements(Ns + "track").ToList();
+            // se l'elenco comprende anche la traccia dati lo allineo alla TOC completa
+            bool fullToc = tracks.Count == toc.Tracks.Count && tracks.Count != audio.Count;
+            for (int i = 0; i < audio.Count; i++)
+            {
+                int idx = fullToc ? toc.Tracks.IndexOf(audio[i]) : i;
+                var te = idx < tracks.Count ? tracks[idx] : null;
+                string name = ((string?)te?.Attribute("name") ?? "").Trim();
+                string artist = ((string?)te?.Attribute("artist") ?? "").Trim();
+                meta.Tracks.Add(new TrackMeta
+                {
+                    Number = audio[i].Number,
+                    Title = name.Length > 0 ? name : $"Traccia {audio[i].Number:D2}",
+                    Artist = artist.Length > 0 ? artist : meta.Artist
+                });
+            }
+            if (meta.Album.Length > 0 || meta.Artist.Length > 0) result.Add(meta);
+        }
+        return result;
+    }
+}
+
+public static class MetadataMerge
+{
+    /// <summary>
+    /// Unisce i risultati di tutti i provider: niente doppioni (stessa fonte + stesso id),
+    /// prima le corrispondenze esatte, poi MusicBrainz, Discogs, freedb/GnuDB.
+    /// Genere e copertina mancanti vengono presi da un altro risultato dello stesso album.
+    /// </summary>
+    public static List<AlbumMeta> Merge(IEnumerable<AlbumMeta> all)
+    {
+        var list = new List<AlbumMeta>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var a in all)
+        {
+            string key = a.Source + "|" + (a.ProviderId.Length > 0 ? a.ProviderId : a.Artist + "|" + a.Album);
+            if (a.Source == "freedb" || a.Source == "GnuDB")
+                key = "cddb|" + Norm(a.Artist) + "|" + Norm(a.Album) + "|" + string.Join("|", a.Tracks.Select(t => Norm(t.Title)));
+            if (!seen.Add(key)) continue;
+            list.Add(a);
+        }
+        static int Rank(string s) => s switch { "MusicBrainz" => 0, "Discogs" => 1, "freedb" => 2, "GnuDB" => 3, _ => 4 };
+        list = list.OrderByDescending(a => a.ExactMatch).ThenBy(a => Rank(a.Source)).ToList();
+
+        foreach (var a in list)
+        {
+            var same = list.Where(o => o != a && Norm(o.Album) == Norm(a.Album) && Norm(o.Artist) == Norm(a.Artist)).ToList();
+            if (a.Genre.Length == 0)
+                a.Genre = same.OrderBy(o => Rank(o.Source)).Select(o => o.Genre).FirstOrDefault(g => g.Length > 0) ?? "";
+            if (a.Year.Length == 0)
+                a.Year = same.Select(o => o.Year).FirstOrDefault(y => y.Length > 0) ?? "";
+            if (a.CoverUrl == null && a.MbReleaseId == null)
+                a.CoverUrl = same.Select(o => o.CoverUrl).FirstOrDefault(u => u != null);
+        }
+        return list;
+    }
+
+    static string Norm(string s) => new string(s.ToLowerInvariant().Where(char.IsLetterOrDigit).ToArray());
 }

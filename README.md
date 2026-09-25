@@ -12,6 +12,8 @@ Estrazione di CD audio in **MP3, FLAC, WAV, AAC (M4A), OGG Vorbis e Opus** con r
 - Tema chiaro / scuro / come il sistema.
 
 ## Build
+Metadati: MusicBrainz, CUETools DB (MusicBrainz + Discogs + freedb) e GnuDB opzionale, tutti insieme. Impostazioni in `%APPDATA%\DiscRipper\settings.json`, salvate subito a ogni modifica (anche posizione della finestra).
+
 Ogni push su `main` → la GitHub Action compila, gira i test e pubblica da sola la release `v1.0.<n. build>` con lo zip (DiscRipper.exe self-contained + ffmpeg.exe). Si può lanciare anche a mano da Actions → Run workflow.
 
 Locale: `dotnet publish src/DiscRipper -c Release -r win-x64 --self-contained -p:PublishSingleFile=true` e metti `ffmpeg.exe` accanto all'exe.

@@ -11,6 +11,6 @@
     <Compile Include="../../src/DiscRipper/Core/*.cs" Link="Core/%(Filename)%(Extension)" />
     <PackageReference Include="TagLibSharp" Version="2.3.0" />
     <PackageReference Include="System.IO.Hashing" Version="8.0.0" />
-    <None Include="*.bin;*.txt;*.jpg" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="*.bin;*.txt;*.jpg;*.xml" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

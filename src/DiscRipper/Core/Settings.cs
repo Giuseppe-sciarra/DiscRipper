@@ -42,11 +42,19 @@ public sealed class AppSettings
     public bool WriteLog { get; set; } = true;
     public string LastDrive { get; set; } = "";
 
+    /// <summary>Posizione e dimensione della finestra all'ultima chiusura: x, y, larghezza, altezza.</summary>
+    public int[]? WindowBounds { get; set; }
+    public bool WindowMaximized { get; set; }
+
     /// <summary>Offset di lettura per modello di lettore (chiave: "Vendor Model").</summary>
     public Dictionary<string, int> DriveOffsets { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Per i test: percorso alternativo del file impostazioni.</summary>
     [JsonIgnore]
-    public static string FilePath => Path.Combine(
+    public static string? PathOverride { get; set; }
+
+    [JsonIgnore]
+    public static string FilePath => PathOverride ?? Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DiscRipper", "settings.json");
 
     static readonly JsonSerializerOptions Opts = new()
@@ -78,7 +86,10 @@ public sealed class AppSettings
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
-            File.WriteAllText(FilePath, JsonSerializer.Serialize(this, Opts));
+            // scrittura atomica: se il PC si spegne a metà non si perde il file
+            string tmp = FilePath + ".tmp";
+            File.WriteAllText(tmp, JsonSerializer.Serialize(this, Opts));
+            File.Move(tmp, FilePath, true);
         }
         catch { }
     }

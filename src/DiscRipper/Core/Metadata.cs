@@ -28,6 +28,10 @@ public sealed class AlbumMeta
     public string? MbReleaseId { get; set; }
     public string? MbReleaseGroupId { get; set; }
     public string? MbAlbumArtistId { get; set; }
+    /// <summary>Copertina suggerita dal provider (es. Discogs/CAA via CUETools DB).</summary>
+    public string? CoverUrl { get; set; }
+    /// <summary>Id del provider (release MusicBrainz, id Discogs, categoria/discid freedb) per eliminare i doppioni.</summary>
+    public string ProviderId { get; set; } = "";
     public List<TrackMeta> Tracks { get; } = new();
 
     public bool IsCompilation =>

@@ -63,6 +63,7 @@ public sealed class MainForm : Form
         MinimumSize = new Size(1000, 780);
         Size = new Size(1200, 940);
         StartPosition = FormStartPosition.CenterScreen;
+        RestoreWindow();
         try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
 
         BuildUi();
@@ -72,6 +73,7 @@ public sealed class MainForm : Form
         Load += async (_, _) =>
         {
             LoadDrives();
+            UpdateButtons();
             if (Args.Contains("--demo")) { FillDemo(); return; }
             await TryAutoRead(); _poll.Start();
         };
@@ -556,7 +558,7 @@ public sealed class MainForm : Form
     async Task LookupCore(Toc toc, bool manual, CancellationTokenSource cts)
     {
         var ct = cts.Token;
-        SetStatus("Cerco il disco su MusicBrainz e AccurateRip…");
+        SetStatus("Cerco il disco su MusicBrainz, Discogs, freedb e AccurateRip…");
         _meta.Text = "Ricerca metadati in corso…";
 
         var arTask = Task.Run(async () =>
@@ -566,27 +568,36 @@ public sealed class MainForm : Form
             catch { return ((ArDisc?)null, true); }
         }, ct);
 
-        var found = new List<AlbumMeta>();
-        string mbStatus;
-        try
+        // tutti i provider in parallelo: MusicBrainz, CUETools DB (MusicBrainz + Discogs + freedb), GnuDB se configurato
+        async Task<(string name, List<AlbumMeta> res, string? err)> Run(string name, Func<Task<List<AlbumMeta>>> f)
         {
-            var mb = await new MusicBrainzClient(_http).LookupAsync(toc, ct);
-            found.AddRange(mb);
-            mbStatus = mb.Count == 0 ? "MusicBrainz: non trovato" : $"MusicBrainz: {mb.Count} risultat{(mb.Count == 1 ? "o" : "i")}{(mb.Any(x => x.ExactMatch) ? "" : " (approssimati)")}";
+            try { return (name, await f(), null); }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex) { return (name, new List<AlbumMeta>(), ex.Message); }
         }
-        catch (OperationCanceledException) { return; }
-        catch (Exception ex) { mbStatus = "MusicBrainz non raggiungibile"; AppendLog("MusicBrainz: " + ex.Message, true); }
-
-        if ((found.Count == 0 || manual) && !string.IsNullOrWhiteSpace(_s.GnuDbEmail))
+        var tasks = new List<Task<(string name, List<AlbumMeta> res, string? err)>>
         {
-            try
-            {
-                var gn = await new GnuDbClient(_http, _s.GnuDbEmail).LookupAsync(toc, ct);
-                found.AddRange(gn);
-                if (gn.Count > 0) mbStatus += $" · GnuDB: {gn.Count}";
-            }
-            catch (OperationCanceledException) { return; }
-            catch (Exception ex) { AppendLog("GnuDB: " + ex.Message, true); }
+            Run("MusicBrainz", () => new MusicBrainzClient(_http).LookupAsync(toc, ct)),
+            Run("CUETools DB", () => new CueToolsDbClient(_http).LookupAsync(toc, ct)),
+        };
+        if (!string.IsNullOrWhiteSpace(_s.GnuDbEmail))
+            tasks.Add(Run("GnuDB", () => new GnuDbClient(_http, _s.GnuDbEmail).LookupAsync(toc, ct)));
+
+        (string name, List<AlbumMeta> res, string? err)[] results;
+        try { results = await Task.WhenAll(tasks); }
+        catch (OperationCanceledException) { return; }
+
+        foreach (var r in results.Where(r => r.err != null))
+            AppendLog($"{r.name} non raggiungibile: {r.err}", true);
+        var found = MetadataMerge.Merge(results.SelectMany(r => r.res));
+        string mbStatus;
+        if (found.Count == 0)
+            mbStatus = results.All(r => r.err != null) ? "Servizi online non raggiungibili" : "Disco non trovato online";
+        else
+        {
+            var bySource = found.GroupBy(f => f.Source).Select(g => $"{g.Key} {g.Count()}");
+            mbStatus = $"Trovati {found.Count} risultat{(found.Count == 1 ? "o" : "i")}: {string.Join(" · ", bySource)}"
+                       + (found.Any(x => x.ExactMatch) ? "" : " (approssimati)");
         }
 
         try { (_ar, _arFailed) = await arTask; }
@@ -615,14 +626,15 @@ public sealed class MainForm : Form
     {
         if (_candidates.SelectedItem is not AlbumMeta a) return;
         ApplyMeta(a);
-        if (a.MbReleaseId == null) { SetCover(null); return; }
-        if (_coverCache.TryGetValue(a.MbReleaseId, out var cached)) { SetCover(cached); return; }
+        string? key = a.MbReleaseId ?? a.CoverUrl;
+        if (key == null) return; // nessuna copertina online: lascio quella attuale (anche se scelta a mano)
+        if (_coverCache.TryGetValue(key, out var cached)) { if (cached != null) SetCover(cached); return; }
         var ct = _lookupCts?.Token ?? CancellationToken.None;
         try
         {
             var bytes = await new MusicBrainzClient(_http).GetCoverAsync(a, ct);
-            _coverCache[a.MbReleaseId] = bytes;
-            if (_candidates.SelectedItem == a) SetCover(bytes);
+            _coverCache[key] = bytes;
+            if (_candidates.SelectedItem == a && bytes != null) SetCover(bytes);
         }
         catch { }
     }
@@ -964,7 +976,21 @@ public sealed class MainForm : Form
         _ripCts?.Cancel();
         _lookupCts?.Cancel();
         _s.OutputRoot = _outRoot.Text.Trim();
+        var b = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
+        _s.WindowBounds = new[] { b.X, b.Y, b.Width, b.Height };
+        _s.WindowMaximized = WindowState == FormWindowState.Maximized;
         _s.Save();
+    }
+
+    /// <summary>Riapre la finestra dove era, se quella posizione è ancora visibile su uno schermo.</summary>
+    void RestoreWindow()
+    {
+        if (_s.WindowBounds is not { Length: 4 } w || w[2] < 600 || w[3] < 500) return;
+        var r = new Rectangle(w[0], w[1], w[2], w[3]);
+        if (!Screen.AllScreens.Any(sc => sc.WorkingArea.IntersectsWith(new Rectangle(r.X + 40, r.Y + 10, Math.Max(1, r.Width - 80), 40)))) return;
+        StartPosition = FormStartPosition.Manual;
+        Bounds = r;
+        if (_s.WindowMaximized) WindowState = FormWindowState.Maximized;
     }
 
     protected override void OnHandleCreated(EventArgs e)

@@ -166,7 +166,7 @@ public sealed class SettingsForm : Form
 
         Section("Riconoscimento del disco");
         Field("Email per GnuDB", _gnudb);
-        Note("MusicBrainz e AccurateRip sono gratuiti e senza account. GnuDB (ex freedb) viene usato come riserva solo se inserisci un'email: la chiede nel saluto del protocollo.");
+        Note("Il disco viene cercato sempre, in contemporanea, su MusicBrainz, Discogs e freedb (tramite CUETools DB) più AccurateRip: tutto gratis e senza account. GnuDB è un'aggiunta facoltativa: si attiva solo se inserisci un'email, perché la chiede nel saluto del protocollo.");
 
         Section("Generale");
         Field("Tema", _theme);

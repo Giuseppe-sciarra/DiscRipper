@@ -1,0 +1,66 @@
+<ctdb xmlns="http://db.cuetools.net/ns/mmd-1.0#" xmlns:ext="http://db.cuetools.net/ns/ext-1.0#">
+ <entry />
+ <metadata album="Ladyhawke" artist="Ladyhawke" barcode="00602517801974" disccount="1" discname="" discnumber="1" id="93a6268c-ddf1-4898-bf93-fb862b1c5c5e" source="musicbrainz" year="2008">
+  <track name="Magic" />
+  <track name="Manipulating Woman" />
+  <track name="My Delirium" />
+  <track name="Better Than Sunday" />
+  <track name="Another Runaway" />
+  <track name="Love Don&apos;t Live Here" />
+  <track name="Back of the Van" />
+  <track name="Paris Is Burning" />
+  <track name="Professional Suicide" />
+  <track name="Dusk Till Dawn" />
+  <track name="Crazy World" />
+  <track name="Morning Dreams" />
+  <label catno="MODCD093" name="Modular Recordings" />
+  <release country="AU" date="2008-09-20" />
+  <coverart primary="1" uri="http://coverartarchive.org/release/93a6268c-ddf1-4898-bf93-fb862b1c5c5e/12491940082.jpg" uri150="http://coverartarchive.org/release/93a6268c-ddf1-4898-bf93-fb862b1c5c5e/12491940082-250.jpg" />
+ </metadata>
+ <metadata album="Ladyhawke" artist="Ladyhawke" barcode="0602517818866" disccount="1" discname="" discnumber="1" id="6accad64-56e0-3114-9a6c-500e28a16642" infourl="https://www.amazon.com/gp/product/B001CWOCVI" source="musicbrainz" year="2008">
+  <track name="Magic" />
+  <track name="Manipulating Woman" />
+  <track name="My Delirium" />
+  <track name="Better Than Sunday" />
+  <track name="Another Runaway" />
+  <track name="Love Don&apos;t Live Here" />
+  <track name="Back of the Van" />
+  <track name="Paris Is Burning" />
+  <track name="Professional Suicide" />
+  <track name="Dusk Till Dawn" />
+  <track name="Crazy World" />
+  <track name="Morning Dreams" />
+  <label catno="MODCD098" name="Modular Recordings" />
+  <release country="XE" date="2008-09-22" />
+ </metadata>
+ <metadata album="Ladyhawke" artist="Ladyhawke" genre="Karuwacho Ladypop" id="jazz/c60af50d" relevance="100" source="freedb" year="2008">
+  <track name="Magic" />
+  <track name="Manipulating Woman" />
+  <track name="My Delirium" />
+  <track name="Better Than Sunday" />
+  <track name="Another Runaway" />
+  <track name="Love Don&apos;t Live Here" />
+  <track name="Back Of The Van" />
+  <track name="Paris Is Burning" />
+  <track name="Professional Suicide" />
+  <track name="Dusk Till Dawn" />
+  <track name="Crazy World" />
+  <track name="Morning Dreams" />
+  <track name="bonus" />
+ </metadata>
+ <metadata album="Ladyhawke" artist="Ladyhawke" genre="Electronic" id="misc/c60af50d" relevance="100" source="freedb">
+  <track name="Magic" />
+  <track name="Manipulating Woman" />
+  <track name="My Delirium" />
+  <track name="Better Than Sunday" />
+  <track name="Another Runaway" />
+  <track name="Love Don&apos;t Live Here" />
+  <track name="Back Of The Van" />
+  <track name="Paris Is Burning" />
+  <track name="Professional Suicide" />
+  <track name="Dusk Till Dawn" />
+  <track name="Crazy World" />
+  <track name="Morning Dreams" />
+  <track name="Data" />
+ </metadata>
+</ctdb>
