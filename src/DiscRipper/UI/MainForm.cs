@@ -10,36 +10,36 @@ public sealed class MainForm : Form
     readonly HttpClient _http = Http.Create();
 
     // header
-    readonly ThemedCombo _drives = new() { Width = 330 };
-    readonly FlatButton _btnRead = new() { Text = "Leggi CD" };
-    readonly FlatButton _btnEject = new() { Text = "Espelli" };
-    readonly FlatButton _btnTheme = new() { Text = "Tema" };
-    readonly FlatButton _btnSettings = new() { Text = "Impostazioni" };
+    readonly ThemedCombo _drives = new() { Width = 340 };
+    readonly FlatButton _btnRead = new() { Text = "Leggi CD", Icon = Glyph.Disc };
+    readonly FlatButton _btnEject = new() { Text = "Espelli", Icon = Glyph.Eject };
+    readonly FlatButton _btnTheme = new() { Text = "Tema", Icon = Glyph.Theme };
+    readonly FlatButton _btnSettings = new() { Text = "Impostazioni", Icon = Glyph.Settings };
 
     // album
-    readonly PictureBox _cover = new() { Size = new Size(190, 190), SizeMode = PictureBoxSizeMode.Zoom, Cursor = Cursors.Hand, AllowDrop = true };
-    readonly ThemedCombo _candidates = new() { Dock = DockStyle.Fill };
-    readonly FlatButton _btnLookup = new() { Text = "Cerca di nuovo" };
-    readonly TextBox _artist = new() { Dock = DockStyle.Fill };
-    readonly TextBox _album = new() { Dock = DockStyle.Fill };
-    readonly TextBox _year = new() { Width = 70 };
-    readonly TextBox _genre = new() { Dock = DockStyle.Fill };
-    readonly TextBox _discNo = new() { Width = 40, Text = "1" };
-    readonly TextBox _discTot = new() { Width = 40, Text = "1" };
-    readonly Label _info = new() { AutoSize = true, Tag = "dim", Font = Theme.Small, Margin = new Padding(0, 6, 0, 0) };
-    readonly Label _meta = new() { AutoSize = true, Tag = "dim", Font = Theme.Small };
+    readonly CoverBox _cover = new() { Size = new Size(196, 196), Cursor = Cursors.Hand, AllowDrop = true };
+    readonly ThemedCombo _candidates = new();
+    readonly FlatButton _btnLookup = new() { Text = "Cerca di nuovo", Icon = Glyph.Search };
+    readonly FieldBox _artist = new();
+    readonly FieldBox _album = new();
+    readonly FieldBox _year = new() { Width = 80 };
+    readonly FieldBox _genre = new();
+    readonly FieldBox _discNo = new() { Width = 52, Text = "1", TextAlign = HorizontalAlignment.Center };
+    readonly FieldBox _discTot = new() { Width = 52, Text = "1", TextAlign = HorizontalAlignment.Center };
+    readonly Label _info = new() { AutoSize = true, Tag = "dim", Font = Theme.Small, Anchor = AnchorStyles.Left, Margin = new Padding(0) };
+    readonly Label _meta = new() { AutoSize = true, Tag = "dim", Font = Theme.Small, Anchor = AnchorStyles.Left, Margin = new Padding(0) };
 
     // tracce
     readonly DataGridView _grid = new() { Dock = DockStyle.Fill };
 
     // fondo
     readonly Dictionary<OutputFormat, ThemedCheckBox> _fmt = new();
-    readonly TextBox _outRoot = new() { Dock = DockStyle.Fill };
-    readonly FlatButton _btnBrowse = new() { Text = "…", MinimumSize = new Size(40, 30) };
-    readonly FlatButton _btnRip = new() { Text = "Estrai", Accent = true, MinimumSize = new Size(140, 40), Font = Theme.Big };
-    readonly FlatButton _btnOpen = new() { Text = "Apri cartella", Visible = false };
-    readonly FlatProgress _progress = new() { Dock = DockStyle.Fill, Margin = new Padding(0, 8, 0, 8) };
-    readonly Label _status = new() { AutoSize = true, Text = "Inserisci un CD audio", Tag = "dim" };
+    readonly FieldBox _outRoot = new();
+    readonly FlatButton _btnBrowse = new() { Text = "Sfoglia", Icon = Glyph.Folder };
+    readonly FlatButton _btnRip = new() { Text = "Estrai", Icon = Glyph.Rip, Accent = true, Font = Theme.Big };
+    readonly FlatButton _btnOpen = new() { Text = "Apri cartella", Icon = Glyph.FolderOpen, Visible = false };
+    readonly FlatProgress _progress = new() { Height = 10 };
+    readonly Label _status = new() { AutoSize = true, Text = "Inserisci un CD audio", Tag = "dim", Anchor = AnchorStyles.Left, Margin = new Padding(0) };
     readonly RichTextBox _log = new() { Dock = DockStyle.Fill, ReadOnly = true, Font = Theme.Mono, DetectUrls = false };
 
     // stato
@@ -60,16 +60,22 @@ public sealed class MainForm : Form
         Text = "DiscRipper";
         Font = Theme.Base;
         AutoScaleMode = AutoScaleMode.Dpi;
-        MinimumSize = new Size(980, 700);
-        Size = new Size(1180, 860);
+        MinimumSize = new Size(1000, 780);
+        Size = new Size(1200, 940);
         StartPosition = FormStartPosition.CenterScreen;
         try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
 
         BuildUi();
         Theme.Changed += () => { Theme.Apply(this); RepaintStatuses(); _btnTheme.Text = ThemeLabel(); };
-        Theme.Set(_s.Theme);
+        Theme.Set(Args.Contains("--dark") ? ThemeMode.Scuro : Args.Contains("--light") ? ThemeMode.Chiaro : _s.Theme);
 
-        Load += async (_, _) => { LoadDrives(); await TryAutoRead(); _poll.Start(); };
+        Load += async (_, _) =>
+        {
+            LoadDrives();
+            if (Args.Contains("--demo")) { FillDemo(); return; }
+            await TryAutoRead(); _poll.Start();
+        };
+        if (Args.Contains("--settings")) Shown += (_, _) => BeginInvoke(OpenSettings);
         Shown += (_, _) => Theme.Apply(this); // ora gli handle esistono: scrollbar scure
         _poll.Tick += async (_, _) => await PollMedia();
         FormClosing += OnClosing;
@@ -79,139 +85,134 @@ public sealed class MainForm : Form
 
     void BuildUi()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(16, 12, 16, 16) };
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(18, 14, 18, 18) };
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 252));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 150));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 186));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 120));
         Controls.Add(root);
 
-        // ---- header
-        var header = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 3, Margin = new Padding(0, 0, 0, 10) };
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        var title = new Label { Text = "DiscRipper", Font = Theme.Title, AutoSize = true, Margin = new Padding(0, 2, 18, 0) };
-        var left = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Dock = DockStyle.Fill, Margin = new Padding(0) };
-        _drives.Margin = new Padding(0, 6, 8, 0);
-        _btnRead.Margin = _btnEject.Margin = new Padding(0, 2, 8, 0);
-        left.Controls.AddRange(new Control[] { _drives, _btnRead, _btnEject });
-        var right = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
-        _btnTheme.Margin = _btnSettings.Margin = new Padding(8, 2, 0, 0);
-        right.Controls.AddRange(new Control[] { _btnTheme, _btnSettings });
-        header.Controls.Add(title, 0, 0);
-        header.Controls.Add(left, 1, 0);
-        header.Controls.Add(right, 2, 0);
+        // ---- header: titolo | lettore + azioni | tema + impostazioni (tutto alla stessa altezza)
+        var title = new Label { Text = "DiscRipper", Font = Theme.Title, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 0, 20, 0) };
+        _drives.Anchor = AnchorStyles.Left;
+        var header = Ui.Row(52,
+            (title, SizeType.AutoSize, 0),
+            (_drives, SizeType.AutoSize, 0),
+            (Spacer(8), SizeType.AutoSize, 0),
+            (_btnRead, SizeType.AutoSize, 0),
+            (Spacer(8), SizeType.AutoSize, 0),
+            (_btnEject, SizeType.AutoSize, 0),
+            (new Panel { Width = 1, Margin = new Padding(0) }, SizeType.Percent, 100),
+            (_btnTheme, SizeType.AutoSize, 0),
+            (Spacer(8), SizeType.AutoSize, 0),
+            (_btnSettings, SizeType.AutoSize, 0));
+        header.Tag = null;
+        header.Margin = new Padding(0, 0, 0, 6);
         root.Controls.Add(header, 0, 0);
 
-        // ---- album card
-        var albumCard = new Card { Dock = DockStyle.Top, Height = 226, Margin = new Padding(0, 0, 0, 12) };
-        var albumTl = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Tag = "surface" };
-        albumTl.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 210));
+        // ---- album: copertina | campi
+        var albumCard = new Card { Dock = DockStyle.Fill, Margin = new Padding(0, 0, 0, 14), Padding = new Padding(18, 18, 18, 14) };
+        var albumTl = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Tag = "surface", Margin = new Padding(0) };
+        albumTl.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220));
         albumTl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        _cover.Margin = new Padding(0, 0, 16, 0);
+        albumTl.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        _cover.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+        _cover.Margin = new Padding(0);
         albumTl.Controls.Add(_cover, 0, 0);
 
-        var fields = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 6, Tag = "surface", Margin = new Padding(0) };
-        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
-        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 65));
-        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
-        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35));
-        for (int i = 0; i < 5; i++) fields.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        const int labelW = 74;
+        var fields = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Tag = "surface", Margin = new Padding(0) };
+        for (int i = 0; i < 4; i++) fields.RowStyles.Add(new RowStyle(SizeType.Absolute, Ui.RowH));
         fields.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-        Label L(string t) => new() { Text = t, AutoSize = true, Tag = "dim", Anchor = AnchorStyles.Left, Margin = new Padding(0, 0, 6, 0) };
+        fields.Controls.Add(Ui.Row(Ui.RowH,
+            (Ui.Caption("Trovato"), SizeType.Absolute, labelW),
+            (_candidates, SizeType.Percent, 100),
+            (Spacer(8), SizeType.AutoSize, 0),
+            (_btnLookup, SizeType.AutoSize, 0)), 0, 0);
+        fields.Controls.Add(Ui.Row(Ui.RowH,
+            (Ui.Caption("Artista"), SizeType.Absolute, labelW),
+            (_artist, SizeType.Percent, 100)), 0, 1);
+        fields.Controls.Add(Ui.Row(Ui.RowH,
+            (Ui.Caption("Album"), SizeType.Absolute, labelW),
+            (_album, SizeType.Percent, 100)), 0, 2);
+        _year.Anchor = _discNo.Anchor = _discTot.Anchor = AnchorStyles.Left;
+        fields.Controls.Add(Ui.Row(Ui.RowH,
+            (Ui.Caption("Genere"), SizeType.Absolute, labelW),
+            (_genre, SizeType.Percent, 100),
+            (Pad(Ui.Caption("Anno", 10), 18), SizeType.AutoSize, 0),
+            (_year, SizeType.AutoSize, 0),
+            (Pad(Ui.Caption("Disco", 10), 18), SizeType.AutoSize, 0),
+            (_discNo, SizeType.AutoSize, 0),
+            (Pad(Ui.Caption("di", 0), 8, 8), SizeType.AutoSize, 0),
+            (_discTot, SizeType.AutoSize, 0)), 0, 3);
 
-        var candRow = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Margin = new Padding(0), Tag = "surface" };
-        candRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        candRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        _candidates.Margin = new Padding(0, 4, 8, 0);
-        _btnLookup.Margin = new Padding(0, 0, 0, 0);
-        _btnLookup.MinimumSize = new Size(90, 30); _btnLookup.Height = 30;
-        candRow.Controls.Add(_candidates, 0, 0);
-        candRow.Controls.Add(_btnLookup, 1, 0);
-
-        fields.Controls.Add(L("Trovato"), 0, 0);
-        fields.Controls.Add(candRow, 1, 0); fields.SetColumnSpan(candRow, 3);
-        fields.Controls.Add(L("Artista"), 0, 1);
-        fields.Controls.Add(_artist, 1, 1); fields.SetColumnSpan(_artist, 3);
-        fields.Controls.Add(L("Album"), 0, 2);
-        fields.Controls.Add(_album, 1, 2); fields.SetColumnSpan(_album, 3);
-        fields.Controls.Add(L("Genere"), 0, 3);
-        fields.Controls.Add(_genre, 1, 3);
-        fields.Controls.Add(L("Anno"), 2, 3);
-        fields.Controls.Add(_year, 3, 3);
-        var discFlow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0), Tag = "surface" };
-        discFlow.Controls.AddRange(new Control[] { _discNo, new Label { Text = "di", AutoSize = true, Tag = "dim", Margin = new Padding(6, 6, 6, 0) }, _discTot });
-        fields.Controls.Add(L("Disco"), 0, 4);
-        fields.Controls.Add(discFlow, 1, 4);
-        var infoFlow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, Margin = new Padding(0), Tag = "surface" };
-        infoFlow.Controls.Add(_info);
-        infoFlow.Controls.Add(_meta);
-        fields.Controls.Add(infoFlow, 1, 5); fields.SetColumnSpan(infoFlow, 3);
-        foreach (var tb in new[] { _artist, _album, _genre, _year, _discNo, _discTot }) tb.Margin = new Padding(0, 4, 0, 0);
+        var infoTl = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Tag = "surface", Margin = new Padding(labelW, 4, 0, 0) };
+        infoTl.RowStyles.Add(new RowStyle(SizeType.Absolute, 20));
+        infoTl.RowStyles.Add(new RowStyle(SizeType.Absolute, 20));
+        infoTl.Controls.Add(_info, 0, 0);
+        infoTl.Controls.Add(_meta, 0, 1);
+        fields.Controls.Add(infoTl, 0, 4);
         albumTl.Controls.Add(fields, 1, 0);
         albumCard.Controls.Add(albumTl);
         root.Controls.Add(albumCard, 0, 1);
 
         // ---- griglia tracce
-        var gridCard = new Card { Dock = DockStyle.Fill, Padding = new Padding(2, 8, 2, 8), Margin = new Padding(0, 0, 0, 12) };
+        var gridCard = new Card { Dock = DockStyle.Fill, Padding = new Padding(10, 10, 10, 10), Margin = new Padding(0, 0, 0, 14) };
         SetupGrid();
         gridCard.Controls.Add(_grid);
         root.Controls.Add(gridCard, 0, 2);
 
-        // ---- fondo: formati, destinazione, estrai
-        var bottom = new Card { Dock = DockStyle.Top, Height = 144, Margin = new Padding(0, 0, 0, 12) };
-        var btl = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 3, Tag = "surface" };
-        btl.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));
+        // ---- fondo: [formati / destinazione / avanzamento] | [Estrai, Apri cartella]
+        var bottom = new Card { Dock = DockStyle.Fill, Margin = new Padding(0, 0, 0, 14), Padding = new Padding(18, 12, 18, 12) };
+        var btl = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 4, Tag = "surface", Margin = new Padding(0) };
         btl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        btl.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        btl.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
-        btl.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        btl.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 196));
+        btl.RowStyles.Add(new RowStyle(SizeType.Absolute, Ui.RowH));
+        btl.RowStyles.Add(new RowStyle(SizeType.Absolute, Ui.RowH));
+        btl.RowStyles.Add(new RowStyle(SizeType.Absolute, Ui.RowH));
         btl.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-        var fmtFlow = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = new Padding(0), Tag = "surface" };
+        var fmtFlow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0), Tag = "surface", Anchor = AnchorStyles.Left };
         foreach (var f in FormatInfo.All)
         {
-            var cb = new ThemedCheckBox { Text = FormatInfo.Label(f), Checked = _s.Formats.HasFlag(f), Margin = new Padding(0, 4, 14, 0) };
+            var cb = new ThemedCheckBox { Text = FormatInfo.Label(f), Checked = _s.Formats.HasFlag(f), Margin = new Padding(0, 0, 18, 0) };
             cb.CheckedChanged += (_, _) => SaveFormats();
             _fmt[f] = cb;
             fmtFlow.Controls.Add(cb);
         }
-        btl.Controls.Add(L("Formati"), 0, 0);
-        btl.Controls.Add(fmtFlow, 1, 0);
+        btl.Controls.Add(Ui.Row(Ui.RowH,
+            (Ui.Caption("Formati"), SizeType.Absolute, labelW),
+            (fmtFlow, SizeType.Percent, 100)), 0, 0);
 
-        var destRow = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Margin = new Padding(0), Tag = "surface" };
-        destRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        destRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         _outRoot.Text = _s.OutputRoot;
-        _outRoot.Margin = new Padding(0, 5, 6, 0);
-        _btnBrowse.Margin = new Padding(0, 1, 0, 0); _btnBrowse.Height = 30;
-        destRow.Controls.Add(_outRoot, 0, 0);
-        destRow.Controls.Add(_btnBrowse, 1, 0);
-        btl.Controls.Add(L("Salva in"), 0, 1);
-        btl.Controls.Add(destRow, 1, 1);
+        btl.Controls.Add(Ui.Row(Ui.RowH,
+            (Ui.Caption("Salva in"), SizeType.Absolute, labelW),
+            (_outRoot, SizeType.Percent, 100),
+            (Spacer(8), SizeType.AutoSize, 0),
+            (_btnBrowse, SizeType.AutoSize, 0)), 0, 1);
 
-        var ripFlow = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.TopDown, WrapContents = false, Margin = new Padding(16, 0, 0, 0), Tag = "surface" };
-        _btnRip.Margin = new Padding(0, 0, 0, 6);
-        _btnOpen.Margin = new Padding(0);
-        _btnOpen.MinimumSize = new Size(140, 30);
-        ripFlow.Controls.Add(_btnRip);
-        ripFlow.Controls.Add(_btnOpen);
-        btl.Controls.Add(ripFlow, 2, 0); btl.SetRowSpan(ripFlow, 3);
+        _progress.Margin = new Padding(0);
+        btl.Controls.Add(Ui.Row(Ui.RowH,
+            (Ui.Caption("Stato"), SizeType.Absolute, labelW),
+            (_progress, SizeType.Percent, 100)), 0, 2);
+        _status.Anchor = AnchorStyles.Left | AnchorStyles.Top;
+        _status.Margin = new Padding(labelW, 0, 0, 0);
+        btl.Controls.Add(_status, 0, 3);
 
-        var progTl = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Margin = new Padding(0), Tag = "surface" };
-        progTl.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
-        progTl.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        progTl.Controls.Add(_progress, 0, 0);
-        progTl.Controls.Add(_status, 0, 1);
-        btl.Controls.Add(progTl, 0, 2); btl.SetColumnSpan(progTl, 2);
+        // Estrai: alto quanto le righe Formati + Salva in; Apri cartella allineato alla riga Stato
+        _btnRip.Dock = DockStyle.Fill;
+        _btnRip.Margin = new Padding(16, 4, 0, 4);
+        btl.Controls.Add(_btnRip, 1, 0); btl.SetRowSpan(_btnRip, 2);
+        _btnOpen.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        _btnOpen.Margin = new Padding(16, 0, 0, 0);
+        btl.Controls.Add(_btnOpen, 1, 2);
         bottom.Controls.Add(btl);
         root.Controls.Add(bottom, 0, 3);
 
-        // ---- log
-        var logCard = new Card { Dock = DockStyle.Fill, Padding = new Padding(10, 8, 6, 8), Margin = new Padding(0) };
+        // ---- registro
+        var logCard = new Card { Dock = DockStyle.Fill, Padding = new Padding(14, 10, 8, 10), Margin = new Padding(0) };
         logCard.Controls.Add(_log);
         root.Controls.Add(logCard, 0, 4);
 
@@ -232,7 +233,6 @@ public sealed class MainForm : Form
         };
         _outRoot.Leave += (_, _) => { _s.OutputRoot = _outRoot.Text.Trim(); _s.Save(); };
         _artist.TextChanged += (_, _) => SyncAlbumArtistToTracks();
-        _artistPrev = "";
 
         // copertina: clic = scegli file, trascina immagine, menu contestuale
         var menu = new ContextMenuStrip();
@@ -252,6 +252,50 @@ public sealed class MainForm : Form
 
     string _artistPrev = "";
 
+    static readonly string[] Args = Environment.GetCommandLineArgs();
+
+    /// <summary>Dati finti per anteprime dell'interfaccia (avvio con --demo).</summary>
+    void FillDemo()
+    {
+        var starts = new[] { 0, 18000, 33500, 51000, 66800, 80100, 97000, 112400, 130900, 146000, 161500, 178000 };
+        var toc = Toc.Build(starts.Select((o, i) => (i + 1, o, true)), 195000);
+        _toc = toc;
+        _driveInfo = new CdDriveInfo('E', "TSSTcorp", "BDDVDW SE-506BB");
+        FillGrid(toc);
+        var m = new AlbumMeta { Source = "MusicBrainz", Artist = "Artista di prova", Album = "Album dimostrativo", Year = "1994", Genre = "Rock", Country = "IT", Format = "CD", Label = "Etichetta", ExactMatch = true };
+        string[] titles = { "Primo brano", "Notte a Roma", "Il mare d'inverno", "Strada lunga", "Luce", "Canzone senza nome", "Tempo", "Via del Corso", "Ultimo treno", "Ancora", "Sotto la pioggia", "Finale" };
+        for (int i = 0; i < 12; i++) m.Tracks.Add(new TrackMeta { Number = i + 1, Title = titles[i], Artist = m.Artist });
+        _candidates.Items.Add(m);
+        _candidates.Items.Add(AlbumMeta.Empty(toc));
+        _suppressCandidate = true; _candidates.SelectedIndex = 0; _suppressCandidate = false;
+        ApplyMeta(m);
+        _meta.Text = "MusicBrainz: 1 risultato";
+        _info.Text = "12 tracce · 43:20 · AccurateRip: nel database (4 stampe) · Offset lettore +6";
+        var bmp = new Bitmap(500, 500);
+        using (var g = Graphics.FromImage(bmp))
+        using (var lg = new System.Drawing.Drawing2D.LinearGradientBrush(new Rectangle(0, 0, 500, 500), Color.FromArgb(236, 72, 153), Color.FromArgb(79, 70, 229), 45f))
+            g.FillRectangle(lg, 0, 0, 500, 500);
+        _cover.Image = bmp;
+        var st = new[] { TrackRipStatus.AccurateRip, TrackRipStatus.AccurateRip, TrackRipStatus.Mismatch, TrackRipStatus.Verifying, TrackRipStatus.Pending };
+        var tx = new[] { "AccurateRip OK (conf. 42)", "AccurateRip OK (conf. 42)", "Letture coerenti, ma diversa da AccurateRip", "Rilettura 1/2 40%", "In coda" };
+        for (int i = 0; i < 5; i++) { _grid.Rows[i].Tag = st[i]; _grid.Rows[i].Cells["status"].Value = tx[i]; }
+        _progress.Value = 0.34;
+        SetStatus("Traccia 04: Rilettura 1/2 — 34% · circa 6:12 rimanenti");
+        AppendLog("DiscRipper 1.0 — prova");
+        AppendLog("Traccia 01  3:59  CRC32 1A2B3C4D  AccurateRip OK (conf. 42)");
+        AppendLog("Traccia 03  3:53  CRC32 5E6F7A8B  [doppia lettura] Letture coerenti, ma diversa da AccurateRip", true);
+        _btnOpen.Visible = true;
+        UpdateButtons();
+    }
+
+    static Control Spacer(int w) => new Panel { Width = w, Height = 1, Margin = new Padding(0) };
+
+    static Control Pad(Control c, int left, int right = -1)
+    {
+        c.Margin = new Padding(left, 0, right >= 0 ? right : c.Margin.Right, 0);
+        return c;
+    }
+
     void SetupGrid()
     {
         var g = _grid;
@@ -262,11 +306,11 @@ public sealed class MainForm : Form
         g.MultiSelect = true;
         g.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
         g.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
-        g.ColumnHeadersHeight = 32;
-        g.RowTemplate.Height = 30;
+        g.ColumnHeadersHeight = 36;
+        g.RowTemplate.Height = 34;
         g.EditMode = DataGridViewEditMode.EditOnKeystrokeOrF2;
 
-        g.Columns.Add(new DataGridViewCheckBoxColumn { Name = "sel", HeaderText = "", Width = 34, FlatStyle = FlatStyle.Flat });
+        g.Columns.Add(new DataGridViewCheckBoxColumn { Name = "sel", HeaderText = "", Width = 44, FlatStyle = FlatStyle.Flat });
         g.Columns.Add(new DataGridViewTextBoxColumn { Name = "num", HeaderText = "#", Width = 44, ReadOnly = true });
         g.Columns.Add(new DataGridViewTextBoxColumn { Name = "title", HeaderText = "Titolo", AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, FillWeight = 55 });
         g.Columns.Add(new DataGridViewTextBoxColumn { Name = "artist", HeaderText = "Artista", AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, FillWeight = 30 });
@@ -276,6 +320,41 @@ public sealed class MainForm : Form
         g.Columns["dur"]!.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
         foreach (DataGridViewColumn c in g.Columns) c.SortMode = DataGridViewColumnSortMode.NotSortable;
 
+        g.CellPainting += (_, e) =>
+        {
+            if (e.ColumnIndex != 0 || e.Graphics == null) return;
+            e.PaintBackground(e.CellBounds, e.RowIndex >= 0 && g.Rows[e.RowIndex].Selected);
+            var p = Theme.P;
+            int box = 18;
+            var r = new Rectangle(e.CellBounds.X + (e.CellBounds.Width - box) / 2, e.CellBounds.Y + (e.CellBounds.Height - box) / 2, box, box);
+            bool on, disabled = false;
+            if (e.RowIndex < 0) on = g.Rows.Cast<DataGridViewRow>().Any() && g.Rows.Cast<DataGridViewRow>().Where(x => !x.ReadOnly).All(x => x.Cells[0].Value is true);
+            else { on = e.Value is true; disabled = g.Rows[e.RowIndex].ReadOnly; }
+            var gr = e.Graphics;
+            gr.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            using (var path = Theme.Rounded(r, 5))
+            {
+                if (disabled) { }
+                else if (on)
+                {
+                    using var b = new SolidBrush(p.Accent); gr.FillPath(b, path);
+                    using var pen = new Pen(p.AccentText, 2f) { StartCap = System.Drawing.Drawing2D.LineCap.Round, EndCap = System.Drawing.Drawing2D.LineCap.Round };
+                    gr.DrawLines(pen, new[] { new Point(r.X + 4, r.Y + 9), new Point(r.X + 8, r.Y + 13), new Point(r.X + 14, r.Y + 5) });
+                }
+                else
+                {
+                    using var b = new SolidBrush(p.Surface2); gr.FillPath(b, path);
+                    using var pen = new Pen(p.Border, 1.4f); gr.DrawPath(pen, path);
+                }
+            }
+            if (e.RowIndex >= 0)
+            {
+                using var line = new Pen(g.GridColor);
+                gr.DrawLine(line, e.CellBounds.Left, e.CellBounds.Bottom - 1, e.CellBounds.Right, e.CellBounds.Bottom - 1);
+            }
+            e.Handled = true;
+        };
+        g.CellValueChanged += (_, e) => { if (e.ColumnIndex == 0) g.InvalidateCell(0, -1); };
         g.CurrentCellDirtyStateChanged += (_, _) => { if (g.IsCurrentCellDirty && g.CurrentCell is DataGridViewCheckBoxCell) g.CommitEdit(DataGridViewDataErrorContexts.Commit); };
         g.CellFormatting += (_, e) =>
         {
@@ -841,7 +920,7 @@ public sealed class MainForm : Form
         _s.Formats = f; _s.Save();
     }
 
-    string ThemeLabel() => _s.Theme switch { ThemeMode.Chiaro => "☀ Chiaro", ThemeMode.Scuro => "☾ Scuro", _ => "◐ Sistema" };
+    string ThemeLabel() => Theme.Mode switch { ThemeMode.Chiaro => "Tema chiaro", ThemeMode.Scuro => "Tema scuro", _ => "Tema di sistema" };
 
     void CycleTheme()
     {

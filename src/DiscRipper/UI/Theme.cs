@@ -115,6 +115,7 @@ public static class Theme
     {
         if (root is Form f) { f.BackColor = P.Back; f.ForeColor = P.Text; TitleBar(f); }
         ApplyTo(root);
+        if (root is FieldBox) { root.Invalidate(); return; } // il TextBox interno lo gestisce FieldBox
         foreach (Control c in root.Controls) Apply(c);
         root.Invalidate(true);
     }
@@ -144,7 +145,6 @@ public static class Theme
                 else if (c.Parent is Card || c.Parent?.Tag as string == "surface" || IsInsideSurface(c)) c.BackColor = P.Surface;
                 else c.BackColor = P.Back;
                 c.ForeColor = P.Text; break;
-            case PictureBox pb: pb.BackColor = P.Surface2; break;
         }
     }
 
@@ -171,9 +171,9 @@ public static class Theme
         g.DefaultCellStyle.Font = Base;
         g.DefaultCellStyle.Padding = new Padding(4, 0, 4, 0);
         g.AlternatingRowsDefaultCellStyle.BackColor = IsDark ? Color.FromArgb(35, 37, 43) : Color.FromArgb(249, 250, 252);
-        g.ColumnHeadersDefaultCellStyle.BackColor = P.Surface2;
+        g.ColumnHeadersDefaultCellStyle.BackColor = P.Surface;
         g.ColumnHeadersDefaultCellStyle.ForeColor = P.TextDim;
-        g.ColumnHeadersDefaultCellStyle.SelectionBackColor = P.Surface2;
+        g.ColumnHeadersDefaultCellStyle.SelectionBackColor = P.Surface;
         g.ColumnHeadersDefaultCellStyle.Font = Bold;
         g.ColumnHeadersDefaultCellStyle.Padding = new Padding(4, 0, 4, 0);
         ScrollTheme(g);

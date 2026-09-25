@@ -10,31 +10,75 @@ public sealed class SettingsForm : Form
     readonly ArDisc? _ar;
     bool _detectedOk;
 
-    readonly TextBox _out = new() { Dock = DockStyle.Fill };
-    readonly ThemedCombo _mp3 = new() { Width = 160 };
-    readonly ThemedCombo _flac = new() { Width = 160 };
-    readonly ThemedCombo _aac = new() { Width = 160 };
-    readonly ThemedCombo _ogg = new() { Width = 160 };
-    readonly ThemedCombo _opus = new() { Width = 160 };
-    readonly ThemedCombo _theme = new() { Width = 160 };
-    readonly ThemedCombo _speed = new() { Width = 160 };
-    readonly NumericUpDown _retries = new() { Minimum = 4, Maximum = 100, Width = 80 };
-    readonly NumericUpDown _offset = new() { Minimum = -3000, Maximum = 3000, Width = 80 };
-    readonly FlatButton _detect = new() { Text = "Rileva ora" };
-    readonly Label _offsetInfo = new() { AutoSize = true, Tag = "dim", MaximumSize = new Size(520, 0) };
-    readonly ThemedCheckBox _paranoia = new() { Text = "Paranoia sempre (doppia lettura anche se AccurateRip coincide)" };
-    readonly ThemedCheckBox _auto = new() { Text = "Leggi il CD appena viene inserito" };
-    readonly ThemedCheckBox _eject = new() { Text = "Espelli il CD a fine estrazione" };
-    readonly ThemedCheckBox _coverJpg = new() { Text = "Salva anche cover.jpg nella cartella dell'album" };
-    readonly ThemedCheckBox _log = new() { Text = "Salva il file .log dell'estrazione" };
-    readonly TextBox _gnudb = new() { Width = 300 };
+    readonly FieldBox _out = new();
+    readonly ThemedCombo _mp3 = new();
+    readonly ThemedCombo _flac = new();
+    readonly ThemedCombo _aac = new();
+    readonly ThemedCombo _ogg = new();
+    readonly ThemedCombo _opus = new();
+    readonly ThemedCombo _theme = new();
+    readonly ThemedCombo _speed = new();
+    readonly ThemedCombo _retries = new();
+    readonly FieldBox _offset = new() { Width = 90, TextAlign = HorizontalAlignment.Center };
+    readonly FlatButton _detect = new() { Text = "Rileva ora", Icon = Glyph.Search };
+    readonly Label _offsetInfo = new() { AutoSize = true, Tag = "dim", Font = Theme.Small };
+    readonly ThemedCheckBox _paranoia = new() { Text = "Paranoia sempre (doppia lettura di ogni traccia)", KeepWidth = true };
+    readonly ThemedCheckBox _auto = new() { Text = "Leggi il CD appena viene inserito", KeepWidth = true };
+    readonly ThemedCheckBox _eject = new() { Text = "Espelli il CD a fine estrazione", KeepWidth = true };
+    readonly ThemedCheckBox _coverJpg = new() { Text = "Salva anche cover.jpg nella cartella dell'album", KeepWidth = true };
+    readonly ThemedCheckBox _log = new() { Text = "Salva il file .log dell'estrazione (checksum di ogni traccia)", KeepWidth = true };
+    readonly FieldBox _gnudb = new();
 
-    static readonly string[] Mp3Opts = { "VBR V0", "VBR V2", "CBR 320", "CBR 256", "CBR 192" };
-    static readonly int[] FlacOpts = { 5, 8 };
-    static readonly int[] AacOpts = { 192, 256, 320 };
-    static readonly int[] OggOpts = { 4, 5, 6, 7, 8 };
-    static readonly int[] OpusOpts = { 96, 128, 160, 192, 256 };
-    static readonly int[] SpeedOpts = { 0, 32, 24, 16, 8, 4 };
+    // valore salvato  →  testo mostrato
+    static readonly (string v, string label)[] Mp3Opts =
+    {
+        ("VBR V0", "VBR V0  ·  ~245 kbps  ·  qualità massima (consigliato)"),
+        ("VBR V2", "VBR V2  ·  ~190 kbps  ·  ottima, file più piccoli"),
+        ("CBR 320", "CBR 320 kbps  ·  bitrate fisso massimo"),
+        ("CBR 256", "CBR 256 kbps  ·  bitrate fisso"),
+        ("CBR 192", "CBR 192 kbps  ·  bitrate fisso, file piccoli"),
+    };
+    static readonly (int v, string label)[] FlacOpts =
+    {
+        (8, "Livello 8  ·  file più piccoli (consigliato)"),
+        (5, "Livello 5  ·  standard, codifica più veloce"),
+    };
+    static readonly (int v, string label)[] AacOpts =
+    {
+        (320, "320 kbps  ·  massima"),
+        (256, "256 kbps  ·  ottima (consigliato)"),
+        (192, "192 kbps  ·  buona, file più piccoli"),
+    };
+    static readonly (int v, string label)[] OggOpts =
+    {
+        (8, "q8  ·  ~256 kbps"),
+        (7, "q7  ·  ~224 kbps"),
+        (6, "q6  ·  ~192 kbps (consigliato)"),
+        (5, "q5  ·  ~160 kbps"),
+        (4, "q4  ·  ~128 kbps"),
+    };
+    static readonly (int v, string label)[] OpusOpts =
+    {
+        (256, "256 kbps  ·  massima"),
+        (192, "192 kbps  ·  ottima"),
+        (160, "160 kbps  ·  trasparente (consigliato)"),
+        (128, "128 kbps  ·  molto buona"),
+        (96, "96 kbps  ·  buona, file piccoli"),
+    };
+    static readonly (int v, string label)[] SpeedOpts =
+    {
+        (0, "Massima"), (32, "32x"), (24, "24x"), (16, "16x"), (8, "8x  ·  CD rovinati"), (4, "4x  ·  CD molto rovinati"),
+    };
+    static readonly (int v, string label)[] RetryOpts =
+    {
+        (10, "10  ·  veloce"), (20, "20  ·  normale (consigliato)"), (40, "40  ·  ostinato"), (80, "80  ·  molto ostinato"),
+    };
+    static readonly (ThemeMode v, string label)[] ThemeOpts =
+    {
+        (ThemeMode.Sistema, "Come il sistema"), (ThemeMode.Chiaro, "Chiaro"), (ThemeMode.Scuro, "Scuro"),
+    };
+
+    const int LabelW = 170;
 
     public SettingsForm(AppSettings s, CdDriveInfo? drive, Toc? toc, ArDisc? ar)
     {
@@ -46,97 +90,110 @@ public sealed class SettingsForm : Form
         MaximizeBox = MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(720, 700);
+        ClientSize = new Size(780, 820);
 
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Padding = new Padding(16) };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Padding = new Padding(18) };
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
         Controls.Add(root);
 
-        var card = new Card { Dock = DockStyle.Fill, AutoScroll = true };
-        var t = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, Tag = "surface" };
-        t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
-        t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        var card = new Card { Dock = DockStyle.Fill, AutoScroll = true, Padding = new Padding(22, 16, 22, 16), Margin = new Padding(0) };
+        var t = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 1, Tag = "surface", Margin = new Padding(0) };
         card.Controls.Add(t);
         root.Controls.Add(card, 0, 0);
 
-        int row = 0;
-        void Section(string title)
+        void Add(Control c, int h)
         {
-            var l = new Label { Text = title, Font = Theme.Big, AutoSize = true, Tag = "accent", Margin = new Padding(0, row == 0 ? 0 : 14, 0, 4) };
-            t.Controls.Add(l, 0, row); t.SetColumnSpan(l, 2); row++;
+            c.Dock = DockStyle.Fill;
+            t.RowStyles.Add(new RowStyle(SizeType.Absolute, h));
+            t.Controls.Add(c, 0, t.RowCount++);
         }
-        void Row(string label, Control c)
+        void Section(string title, bool first = false)
         {
-            var l = new Label { Text = label, AutoSize = true, Tag = "dim", Anchor = AnchorStyles.Left, Margin = new Padding(0, 6, 6, 0) };
-            c.Margin = new Padding(0, 3, 0, 3);
-            t.Controls.Add(l, 0, row); t.Controls.Add(c, 1, row); row++;
+            var l = new Label { Text = title, Font = Theme.Big, AutoSize = true, Tag = "accent", Margin = new Padding(0) };
+            var holder = new Panel { Tag = "surface", Margin = new Padding(0) };
+            l.Location = new Point(0, first ? 0 : 18);
+            holder.Controls.Add(l);
+            Add(holder, first ? 32 : 46);
         }
-        void Full(Control c) { c.Margin = new Padding(0, 3, 0, 3); t.Controls.Add(c, 0, row); t.SetColumnSpan(c, 2); row++; }
-
-        Section("Destinazione");
-        var outRow = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, AutoSize = true, Margin = new Padding(0), Tag = "surface" };
-        outRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        outRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        var browse = new FlatButton { Text = "…", MinimumSize = new Size(40, 28), Height = 28, Margin = new Padding(6, 0, 0, 0) };
-        _out.Margin = new Padding(0, 3, 0, 0);
-        outRow.Controls.Add(_out, 0, 0); outRow.Controls.Add(browse, 1, 0);
-        Row("Cartella", outRow);
-        Full(new Label { Text = "Struttura: Artista\\Album (Anno)\\01 - Titolo  — anche percorsi di rete (\\\\server\\share o unità mappata).", AutoSize = true, Tag = "dim", MaximumSize = new Size(640, 0) });
-
-        Section("Qualità");
-        Row("MP3", _mp3);
-        Row("FLAC compressione", _flac);
-        Row("AAC (M4A) kbps", _aac);
-        Row("OGG qualità", _ogg);
-        Row("Opus kbps", _opus);
-
-        Section("Lettura");
-        Full(_paranoia);
-        Row("Riletture max", _retries);
-        Row("Velocità", _speed);
-        var offFlow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0), Tag = "surface" };
-        _detect.Margin = new Padding(8, 0, 0, 0);
-        _detect.Height = 28; _detect.MinimumSize = new Size(100, 28);
-        offFlow.Controls.Add(_offset); offFlow.Controls.Add(_detect);
-        Row("Offset lettore", offFlow);
-        Full(_offsetInfo);
-
-        Section("Metadati");
-        Row("Email GnuDB", _gnudb);
-        Full(new Label
+        void Field(string label, Control c, Control? extra = null)
         {
-            Text = "MusicBrainz e AccurateRip non richiedono account. GnuDB (ex freedb) viene usato come riserva solo se inserisci un'email: la chiede nel saluto del protocollo.",
-            AutoSize = true, Tag = "dim", MaximumSize = new Size(640, 0)
-        });
+            var cols = new List<(Control, SizeType, float)> { (Ui.Caption(label), SizeType.Absolute, LabelW), (c, SizeType.Percent, 100) };
+            if (extra != null) { cols.Add((Spacer(8), SizeType.AutoSize, 0)); cols.Add((extra, SizeType.AutoSize, 0)); }
+            Add(Ui.Row(Ui.RowH, cols.ToArray()), Ui.RowH);
+        }
+        const int NoteW = 480; // larghezza usata per calcolare l'altezza (il testo va a capo da solo)
+        Label Note(string text)
+        {
+            var l = new Label { Text = text, AutoSize = false, Dock = DockStyle.Fill, Tag = "dim", Font = Theme.Small, Margin = new Padding(0, 0, 0, 0) };
+            int h = TextRenderer.MeasureText(text, Theme.Small, new Size(NoteW, 0), TextFormatFlags.WordBreak).Height + 8;
+            var row = Ui.Row(h, (Spacer(LabelW), SizeType.Absolute, LabelW), (l, SizeType.Percent, 100));
+            Add(row, h);
+            return l;
+        }
+        void Check(ThemedCheckBox cb)
+        {
+            cb.Width = 520;
+            Add(Ui.Row(34, (Spacer(LabelW), SizeType.Absolute, LabelW), (cb, SizeType.Percent, 100)), 34);
+        }
+
+        var browse = new FlatButton { Text = "Sfoglia", Icon = Glyph.Folder };
+
+        Section("Destinazione", true);
+        Field("Cartella", _out, browse);
+        Note("Struttura: Artista\\Album (Anno)\\01 - Titolo. Va bene anche un percorso di rete (\\\\server\\share o un'unità mappata).");
+
+        Section("Qualità dei formati");
+        Field("MP3", _mp3);
+        Note("VBR = bitrate variabile: più kbps nei passaggi complessi, meno nei silenzi. V0 suona come il CD e pesa meno di un 320 fisso. Il CBR serve solo per vecchi lettori che non digeriscono il VBR.");
+        Field("FLAC", _flac);
+        Note("FLAC è senza perdita: la qualità è identica al CD a qualsiasi livello, cambia solo quanto pesa il file.");
+        Field("AAC (M4A)", _aac);
+        Field("OGG Vorbis", _ogg);
+        Field("Opus", _opus);
+
+        Section("Lettura del CD");
+        Check(_paranoia);
+        Note("Normalmente rilegge solo se AccurateRip non coincide o il disco non è nel database. Attivala per i CD graffiati.");
+        Field("Riletture massime", _retries);
+        Note("Quante volte rileggere un punto del disco che dà risultati diversi prima di arrendersi.");
+        Field("Velocità di lettura", _speed);
+        _offset.Anchor = AnchorStyles.Left;
+        var offRow = Ui.Row(Ui.RowH, (_offset, SizeType.AutoSize, 0), (Spacer(8), SizeType.AutoSize, 0), (_detect, SizeType.AutoSize, 0), (new Panel { Margin = new Padding(0) }, SizeType.Percent, 100));
+        Field("Offset del lettore", offRow);
+        _offsetInfo.AutoSize = false; _offsetInfo.Dock = DockStyle.Fill; _offsetInfo.Margin = new Padding(0);
+        Add(Ui.Row(44, (Spacer(LabelW), SizeType.Absolute, LabelW), (_offsetInfo, SizeType.Percent, 100)), 44);
+
+        Section("Riconoscimento del disco");
+        Field("Email per GnuDB", _gnudb);
+        Note("MusicBrainz e AccurateRip sono gratuiti e senza account. GnuDB (ex freedb) viene usato come riserva solo se inserisci un'email: la chiede nel saluto del protocollo.");
 
         Section("Generale");
-        Row("Tema", _theme);
-        Full(_auto);
-        Full(_eject);
-        Full(_coverJpg);
-        Full(_log);
+        Field("Tema", _theme);
+        Check(_auto);
+        Check(_eject);
+        Check(_coverJpg);
+        Check(_log);
+        Add(new Panel { Tag = "surface" }, 8);
 
-        foreach (var cb in new[] { _paranoia, _auto, _eject, _coverJpg, _log }) { cb.AutoSize = false; cb.Width = 600; }
-
-        var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(0, 12, 0, 0) };
-        var ok = new FlatButton { Text = "Salva", Accent = true, DialogResult = DialogResult.OK };
-        var cancel = new FlatButton { Text = "Annulla", DialogResult = DialogResult.Cancel, Margin = new Padding(0, 0, 8, 0) };
-        buttons.Controls.Add(ok); buttons.Controls.Add(cancel);
+        var ok = new FlatButton { Text = "Salva", Accent = true, DialogResult = DialogResult.OK, Width = 130 };
+        var cancel = new FlatButton { Text = "Annulla", DialogResult = DialogResult.Cancel, Width = 130 };
+        var buttons = Ui.Row(58, (new Panel { Margin = new Padding(0) }, SizeType.Percent, 100), (cancel, SizeType.AutoSize, 0), (Spacer(10), SizeType.AutoSize, 0), (ok, SizeType.AutoSize, 0));
+        buttons.Tag = null;
         root.Controls.Add(buttons, 0, 1);
         AcceptButton = ok; CancelButton = cancel;
 
-        // valori
+        // ---- valori
         _out.Text = s.OutputRoot;
-        Fill(_mp3, Mp3Opts, s.Mp3Quality);
-        Fill(_flac, FlacOpts.Select(x => x.ToString()).ToArray(), s.FlacLevel.ToString());
-        Fill(_aac, AacOpts.Select(x => x.ToString()).ToArray(), s.AacBitrate.ToString());
-        Fill(_ogg, OggOpts.Select(x => "q" + x).ToArray(), "q" + s.OggQuality);
-        Fill(_opus, OpusOpts.Select(x => x.ToString()).ToArray(), s.OpusBitrate.ToString());
-        Fill(_theme, new[] { "Sistema", "Chiaro", "Scuro" }, s.Theme.ToString());
-        Fill(_speed, SpeedOpts.Select(x => x == 0 ? "Massima" : x + "x").ToArray(), s.ReadSpeed == 0 ? "Massima" : s.ReadSpeed + "x");
+        Fill(_mp3, Mp3Opts.Select(x => x.label), Array.FindIndex(Mp3Opts, x => x.v == s.Mp3Quality));
+        Fill(_flac, FlacOpts.Select(x => x.label), Array.FindIndex(FlacOpts, x => x.v == s.FlacLevel));
+        Fill(_aac, AacOpts.Select(x => x.label), Array.FindIndex(AacOpts, x => x.v == s.AacBitrate));
+        Fill(_ogg, OggOpts.Select(x => x.label), Array.FindIndex(OggOpts, x => x.v == s.OggQuality));
+        Fill(_opus, OpusOpts.Select(x => x.label), Array.FindIndex(OpusOpts, x => x.v == s.OpusBitrate));
+        Fill(_speed, SpeedOpts.Select(x => x.label), Array.FindIndex(SpeedOpts, x => x.v == s.ReadSpeed));
+        Fill(_retries, RetryOpts.Select(x => x.label), Nearest(RetryOpts.Select(x => x.v).ToArray(), s.MaxRetries));
+        Fill(_theme, ThemeOpts.Select(x => x.label), Array.FindIndex(ThemeOpts, x => x.v == s.Theme));
         _paranoia.Checked = s.ParanoiaAlways;
-        _retries.Value = Math.Clamp(s.MaxRetries, 4, 100);
         _auto.Checked = s.AutoReadOnInsert;
         _eject.Checked = s.EjectWhenDone;
         _coverJpg.Checked = s.SaveCoverJpg;
@@ -146,15 +203,15 @@ public sealed class SettingsForm : Form
         if (drive != null)
         {
             var (o, known) = s.GetOffset(drive.Key);
-            _offset.Value = o;
+            _offset.Text = o.ToString("+0;-0;0");
             _offsetInfo.Text = known
                 ? $"{drive.Key}: offset rilevato e salvato."
-                : $"{drive.Key}: offset non ancora rilevato — verrà cercato da solo alla prima estrazione di un CD presente in AccurateRip.";
+                : $"{drive.Key}: non ancora rilevato — lo cerca da solo alla prima estrazione di un CD presente in AccurateRip.";
         }
         else { _offset.Enabled = false; _offsetInfo.Text = "Nessun lettore selezionato."; }
         _detect.Enabled = drive != null && toc != null && ar != null;
         if (drive != null && (toc == null || ar == null))
-            _offsetInfo.Text += " Per rilevarlo ora serve un CD presente in AccurateRip nel lettore.";
+            _offsetInfo.Text += " Per rilevarlo adesso inserisci un CD presente in AccurateRip.";
 
         browse.Click += (_, _) =>
         {
@@ -167,11 +224,19 @@ public sealed class SettingsForm : Form
         Theme.Apply(this);
     }
 
-    static void Fill(ComboBox c, string[] items, string sel)
+    static Control Spacer(int w) => new Panel { Width = w, Height = 1, Margin = new Padding(0) };
+
+    static int Nearest(int[] values, int v)
     {
-        c.Items.AddRange(items);
-        int i = Array.IndexOf(items, sel);
-        c.SelectedIndex = i >= 0 ? i : 0;
+        int best = 0;
+        for (int i = 1; i < values.Length; i++) if (Math.Abs(values[i] - v) < Math.Abs(values[best] - v)) best = i;
+        return best;
+    }
+
+    static void Fill(ComboBox c, IEnumerable<string> items, int sel)
+    {
+        c.Items.AddRange(items.Cast<object>().ToArray());
+        c.SelectedIndex = sel >= 0 && sel < c.Items.Count ? sel : 0;
     }
 
     async Task Detect()
@@ -188,11 +253,11 @@ public sealed class SettingsForm : Form
             });
             if (r != null)
             {
-                _offset.Value = r.Value.offset;
+                _offset.Text = r.Value.offset.ToString("+0;-0;0");
                 _detectedOk = true;
                 _offsetInfo.Text = $"Offset trovato: {r.Value.offset:+0;-0;0} (traccia {r.Value.trackNumber}, confidenza {r.Value.confidence}). Premi Salva.";
             }
-            else _offsetInfo.Text = "Nessun offset coincide con AccurateRip su questo disco. Prova con un altro CD molto diffuso.";
+            else _offsetInfo.Text = "Nessun offset coincide con AccurateRip su questo disco. Prova con un CD molto diffuso.";
         }
         catch (Exception ex) { _offsetInfo.Text = "Errore: " + ex.Message; }
         finally { _detect.Enabled = true; }
@@ -201,24 +266,24 @@ public sealed class SettingsForm : Form
     void SaveValues()
     {
         _s.OutputRoot = _out.Text.Trim();
-        _s.Mp3Quality = Mp3Opts[Math.Max(0, _mp3.SelectedIndex)];
-        _s.FlacLevel = FlacOpts[Math.Max(0, _flac.SelectedIndex)];
-        _s.AacBitrate = AacOpts[Math.Max(0, _aac.SelectedIndex)];
-        _s.OggQuality = OggOpts[Math.Max(0, _ogg.SelectedIndex)];
-        _s.OpusBitrate = OpusOpts[Math.Max(0, _opus.SelectedIndex)];
-        _s.Theme = (ThemeMode)Math.Max(0, _theme.SelectedIndex);
-        _s.ReadSpeed = SpeedOpts[Math.Max(0, _speed.SelectedIndex)];
+        _s.Mp3Quality = Mp3Opts[Math.Max(0, _mp3.SelectedIndex)].v;
+        _s.FlacLevel = FlacOpts[Math.Max(0, _flac.SelectedIndex)].v;
+        _s.AacBitrate = AacOpts[Math.Max(0, _aac.SelectedIndex)].v;
+        _s.OggQuality = OggOpts[Math.Max(0, _ogg.SelectedIndex)].v;
+        _s.OpusBitrate = OpusOpts[Math.Max(0, _opus.SelectedIndex)].v;
+        _s.Theme = ThemeOpts[Math.Max(0, _theme.SelectedIndex)].v;
+        _s.ReadSpeed = SpeedOpts[Math.Max(0, _speed.SelectedIndex)].v;
+        _s.MaxRetries = RetryOpts[Math.Max(0, _retries.SelectedIndex)].v;
         _s.ParanoiaAlways = _paranoia.Checked;
-        _s.MaxRetries = (int)_retries.Value;
         _s.AutoReadOnInsert = _auto.Checked;
         _s.EjectWhenDone = _eject.Checked;
         _s.SaveCoverJpg = _coverJpg.Checked;
         _s.WriteLog = _log.Checked;
         _s.GnuDbEmail = _gnudb.Text.Trim();
-        if (_drive != null && _offset.Enabled)
+        if (_drive != null && _offset.Enabled && int.TryParse(_offset.Text.Trim().TrimStart('+'), out var val))
         {
             var (o, known) = _s.GetOffset(_drive.Key);
-            if (known || _detectedOk || (int)_offset.Value != o) _s.DriveOffsets[_drive.Key] = (int)_offset.Value;
+            if (known || _detectedOk || val != o) _s.DriveOffsets[_drive.Key] = Math.Clamp(val, -3000, 3000);
         }
     }
 
