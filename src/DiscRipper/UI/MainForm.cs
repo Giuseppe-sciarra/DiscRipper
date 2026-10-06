@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Runtime.InteropServices;
 using DiscRipper.Core;
 
@@ -7,6 +7,9 @@ namespace DiscRipper.UI;
 public sealed class MainForm : Form
 {
     readonly AppSettings _s = AppSettings.Load();
+    CrmSessione _crm = null!;
+    CrmBanda _crmBanda = null!;
+    readonly CrmImpostazioni _crmImp = new();
     readonly HttpClient _http = Http.Create();
 
     // header
@@ -70,6 +73,12 @@ public sealed class MainForm : Form
         try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
 
         BuildUi();
+        // ── CRM: banda in alto con il cliente e i CD fatti/totali (stesso giro di VHSCapture) ──
+        _crmImp.Attivo = _s.CrmAttivo; _crmImp.Url = _s.CrmUrl ?? ""; _crmImp.Token = _s.CrmToken ?? ""; _crmImp.UltimoCliente = _s.CrmUltimoCliente;
+        _crm = new CrmSessione(_crmImp, imp => { _s.CrmAttivo = imp.Attivo; _s.CrmUrl = imp.Url; _s.CrmToken = imp.Token; _s.CrmUltimoCliente = imp.UltimoCliente; _s.Save(); }, "1.1.0");
+        _crmBanda = new CrmBanda(_crm, this);
+        Controls.Add(_crmBanda);
+        Shown += async (_, _) => { await _crm.RiprendiUltimo(); };
         Theme.Changed += () => { Theme.Apply(this); RepaintStatuses(); _btnTheme.Text = ThemeLabel(); };
         Theme.Set(Args.Contains("--dark") ? ThemeMode.Scuro : Args.Contains("--light") ? ThemeMode.Chiaro : _s.Theme);
 
@@ -834,6 +843,8 @@ public sealed class MainForm : Form
         if (selected.Count == 0) { MessageBox.Show(this, "Seleziona almeno una traccia.", "DiscRipper", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
         if (_s.Formats == OutputFormat.None) { MessageBox.Show(this, "Seleziona almeno un formato.", "DiscRipper", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
 
+        if (!await _crm.PreparaCliente(this)) return;      // per quale cliente del CRM? (se il collegamento è attivo)
+
         var meta = BuildMetaFromUi();
         var job = new RipJob
         {
@@ -861,9 +872,14 @@ public sealed class MainForm : Form
         _progress.Value = 0;
         var sw = Stopwatch.StartNew();
         var progress = new Progress<RipEvent>(e => OnRipEvent(e, sw));
+        string disco = string.IsNullOrWhiteSpace(meta.Album) ? "CD" : (string.IsNullOrWhiteSpace(meta.Artist) ? meta.Album : meta.Artist + " — " + meta.Album);
+        await _crm.Inizio(disco);                            // nel CRM: «💽 PC · Rossi · riversa il CD 1º di 3»
+        bool crmEsitoDato = false;
         try
         {
             await job.RunAsync(progress, _ripCts.Token);
+            crmEsitoDato = true;
+            await _crm.ChiediFine(this, 1, disco + " → " + job.AlbumDir, job.ErrorCount > 0 && job.ErrorCount >= selected.Count);   // un CD riversato per il CRM
             _lastAlbumDir = job.AlbumDir;
             _btnOpen.Visible = true;
             _progress.Value = 1;
@@ -893,6 +909,7 @@ public sealed class MainForm : Form
             UpdateButtons();
             _poll.Start();
             UpdateInfo();
+            if (!crmEsitoDato) await _crm.ChiediFine(this, 1, disco, true);   // annullato o errore: non si conta niente
         }
     }
 

@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace DiscRipper.Core;
@@ -41,6 +41,12 @@ public sealed class AppSettings
     public bool SaveCoverJpg { get; set; } = true;
     public bool WriteLog { get; set; } = true;
     public string LastDrive { get; set; } = "";
+
+    /// <summary>Collegamento al CRM Tastiere Digitali (stesse API di VHSCapture, tipo «CD da riversare»).</summary>
+    public bool CrmAttivo { get; set; }
+    public string CrmUrl { get; set; } = "";
+    public string CrmToken { get; set; } = "";
+    public int CrmUltimoCliente { get; set; }
 
     /// <summary>Posizione e dimensione della finestra all'ultima chiusura: x, y, larghezza, altezza.</summary>
     public int[]? WindowBounds { get; set; }
