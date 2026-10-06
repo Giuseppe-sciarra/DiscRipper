@@ -5,7 +5,7 @@ name: Build & Release DiscRipper
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
   workflow_dispatch:
 
 permissions:
@@ -32,7 +32,11 @@ jobs:
         id: ver
         shell: pwsh
         run: |
-          $v = "1.0.${{ github.run_number }}"
+          [xml]$proj = Get-Content "src/DiscRipper/DiscRipper.csproj"
+          $base = ($proj.Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1)
+          if (-not $base) { $base = "1.0.0" }
+          $mm = ($base -split '\.')[0..1] -join '.'
+          $v = "$mm.${{ github.run_number }}"
           "version=$v" >> $env:GITHUB_OUTPUT
           "tag=v$v" >> $env:GITHUB_OUTPUT
           Write-Host "Versione $v"
