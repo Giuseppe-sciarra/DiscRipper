@@ -437,15 +437,19 @@ namespace DiscRipper
         readonly CrmSessione sess;
         readonly Form owner;
 
+        bool Scuro() { var c = owner != null ? owner.BackColor : SystemColors.Control; return (0.2126 * c.R + 0.7152 * c.G + 0.0722 * c.B) / 255.0 < 0.5; }
+        Color Tinta(Color chiaro, Color scuro) => Scuro() ? scuro : chiaro;
+
         public CrmBanda(CrmSessione sessione, Form proprietario)
         {
             sess = sessione; owner = proprietario;
             Dock = DockStyle.Top; Height = 44; Padding = new Padding(8, 6, 8, 6);
-            BackColor = Color.FromArgb(240, 236, 248);
             var flow = new FlowLayoutPanel { Dock = DockStyle.Right, AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Padding = new Padding(0), Margin = new Padding(0) };
             flow.Controls.Add(bCliente); flow.Controls.Add(bConteggio); flow.Controls.Add(bOpz);
             lbl.Dock = DockStyle.Fill;
             Controls.Add(lbl); Controls.Add(flow);
+            foreach (var b in new[] { bCliente, bConteggio, bOpz }) { b.FlatAppearance.BorderSize = 1; b.Margin = new Padding(4, 0, 0, 0); b.Height = 30; }
+            owner.BackColorChanged += (s, e) => Aggiorna();   // cambio tema nel programma ospite
             bCliente.Click += async (s, e) => { if (!sess.Attivo) { sess.Impostazioni(owner); return; } if (sess.InCorso) { MessageBox.Show(owner, "C'è un lavoro in corso: cambia cliente quando ha finito.", CrmInfo.App); return; } await sess.ScegliCliente(owner); };
             bConteggio.Click += async (s, e) => { if (sess.Corrente == null) { MessageBox.Show(owner, "Prima scegli il cliente dal CRM.", CrmInfo.App); return; } await sess.Riconteggio(owner); };
             bOpz.Click += (s, e) => sess.Impostazioni(owner);
@@ -459,7 +463,17 @@ namespace DiscRipper
             bool c = sess.Corrente != null;
             bConteggio.Visible = c;
             bCliente.Text = c ? "👤 Cambia cliente" : (sess.Attivo ? "👤 Cliente dal CRM" : "👤 Collega al CRM");
-            BackColor = sess.InCorso ? Color.FromArgb(255, 236, 214) : (c ? Color.FromArgb(224, 244, 232) : Color.FromArgb(240, 236, 248));
+            // sfondo: lavoro in corso = arancio, cliente scelto = verde, altrimenti neutro; tinte chiare o scure secondo il tema del programma
+            BackColor = sess.InCorso ? Tinta(Color.FromArgb(255, 236, 214), Color.FromArgb(74, 52, 30))
+                      : c ? Tinta(Color.FromArgb(224, 244, 232), Color.FromArgb(30, 62, 46))
+                          : Tinta(Color.FromArgb(240, 236, 248), Color.FromArgb(44, 42, 56));
+            lbl.ForeColor = Tinta(Color.FromArgb(34, 34, 34), Color.FromArgb(236, 236, 240));
+            foreach (var b in new[] { bCliente, bConteggio, bOpz })
+            {
+                b.BackColor = Tinta(Color.White, Color.FromArgb(64, 62, 78));
+                b.ForeColor = Tinta(Color.FromArgb(34, 34, 34), Color.FromArgb(236, 236, 240));
+                b.FlatAppearance.BorderColor = Tinta(Color.FromArgb(200, 196, 214), Color.FromArgb(96, 94, 112));
+            }
         }
     }
 
