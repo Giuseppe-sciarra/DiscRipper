@@ -2,6 +2,8 @@
 
 Estrazione di CD audio in **MP3, FLAC, WAV, AAC (M4A), OGG Vorbis e Opus** con riconoscimento automatico del disco e tag completi. Stessa famiglia di DVDRescue / Tape2MP3 / mp4todvd (C# WinForms .NET 8, build su GitHub Actions).
 
+**Download, guida e domande frequenti:** [tastieredigitali.tech/casi-studio/discripper](https://tastieredigitali.tech/casi-studio/discripper/)
+
 ## Cosa fa
 - Legge il CD appena lo inserisci (TOC + CD-Text) e cerca il disco su **MusicBrainz** (gratis, senza account). Copertina da **Cover Art Archive**. Riserva opzionale: **GnuDB** (serve solo un'email nelle impostazioni). Se non trova niente usa il CD-Text o ti fa scrivere i dati a mano.
 - Lettura **veloce + verifica AccurateRip**. Se una traccia non coincide (o il disco non è nel database) la rilegge una seconda volta e poi **rilegge ostinatamente solo i settori che differiscono** finché due letture coincidono (modalità paranoia). Opzione "Paranoia sempre" per i CD rovinati.
