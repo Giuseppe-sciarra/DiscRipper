@@ -28,6 +28,8 @@ public sealed class SettingsForm : Form
     readonly ThemedCheckBox _coverJpg = new() { Text = "Salva anche cover.jpg nella cartella dell'album", KeepWidth = true };
     readonly ThemedCheckBox _log = new() { Text = "Salva il file .log dell'estrazione (checksum di ogni traccia)", KeepWidth = true };
     readonly FieldBox _gnudb = new();
+    readonly FieldBox _discogs = new();
+    readonly FieldBox _lastfm = new();
 
     // valore salvato  →  testo mostrato
     static readonly (string v, string label)[] Mp3Opts =
@@ -172,6 +174,15 @@ public sealed class SettingsForm : Form
         Section("Riconoscimento del disco");
         Field("Email per GnuDB", _gnudb);
         Note("Il disco viene cercato sempre, in contemporanea, su MusicBrainz, Discogs e freedb (tramite CUETools DB) più AccurateRip: tutto gratis e senza account. GnuDB è un'aggiunta facoltativa: si attiva solo se inserisci un'email, perché la chiede nel saluto del protocollo.");
+        Note("Se il disco non viene trovato (succede con le copie masterizzate) DiscRipper chiede se cercarlo per nome: scrivi artista e titolo e lo cerca su MusicBrainz, Deezer, Apple Music e Discogs (gratis, senza account) e, con la chiave qui sotto, anche su Last.fm. Si apre anche a mano con «Cerca per nome».");
+        var getDiscogs = new FlatButton { Text = "Crea token" };
+        var getLastfm = new FlatButton { Text = "Crea API key" };
+        Field("Token Discogs", _discogs, getDiscogs);
+        Note("Facoltativo. Senza token Discogs funziona lo stesso ma con meno ricerche al minuto e a volte senza copertine. Si crea gratis: discogs.com → Impostazioni → Developers → «Generate new token».");
+        Field("API key Last.fm", _lastfm, getLastfm);
+        Note("Facoltativa: senza, Last.fm non viene usato. Si crea gratis su last.fm/api/account/create (serve un account Last.fm): basta il nome dell'applicazione, gli altri campi si possono lasciare vuoti.");
+        getDiscogs.Click += (_, _) => OpenUrl("https://www.discogs.com/settings/developers");
+        getLastfm.Click += (_, _) => OpenUrl("https://www.last.fm/api/account/create");
 
         Section("Generale");
         Field("Tema", _theme);
@@ -204,6 +215,8 @@ public sealed class SettingsForm : Form
         _coverJpg.Checked = s.SaveCoverJpg;
         _log.Checked = s.WriteLog;
         _gnudb.Text = s.GnuDbEmail;
+        _discogs.Text = s.DiscogsToken;
+        _lastfm.Text = s.LastFmApiKey;
 
         if (drive != null)
         {
@@ -230,6 +243,12 @@ public sealed class SettingsForm : Form
     }
 
     static Control Spacer(int w) => new Panel { Width = Ui.S(w), Height = 1, Margin = new Padding(0) };
+
+    void OpenUrl(string url)
+    {
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true }); }
+        catch (Exception ex) { MessageBox.Show(this, $"Non riesco ad aprire il browser: {ex.Message}\n\n{url}", "DiscRipper", MessageBoxButtons.OK, MessageBoxIcon.Information); }
+    }
 
     static int Nearest(int[] values, int v)
     {
@@ -285,6 +304,8 @@ public sealed class SettingsForm : Form
         _s.SaveCoverJpg = _coverJpg.Checked;
         _s.WriteLog = _log.Checked;
         _s.GnuDbEmail = _gnudb.Text.Trim();
+        _s.DiscogsToken = _discogs.Text.Trim();
+        _s.LastFmApiKey = _lastfm.Text.Trim();
         if (_drive != null && _offset.Enabled && int.TryParse(_offset.Text.Trim().TrimStart('+'), out var val))
         {
             var (o, known) = _s.GetOffset(_drive.Key);

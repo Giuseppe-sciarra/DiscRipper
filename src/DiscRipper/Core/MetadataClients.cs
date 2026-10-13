@@ -19,7 +19,7 @@ public static class Http
 }
 
 /// <summary>Lookup gratuito su MusicBrainz tramite disc ID (nessun account richiesto).</summary>
-public sealed class MusicBrainzClient
+public sealed partial class MusicBrainzClient
 {
     readonly HttpClient _http;
     static readonly SemaphoreSlim Gate = new(1, 1);

@@ -6,6 +6,7 @@ Estrazione di CD audio in **MP3, FLAC, WAV, AAC (M4A), OGG Vorbis e Opus** con r
 
 ## Cosa fa
 - Legge il CD appena lo inserisci (TOC + CD-Text) e cerca il disco su **MusicBrainz** (gratis, senza account). Copertina da **Cover Art Archive**. Riserva opzionale: **GnuDB** (serve solo un'email nelle impostazioni). Se non trova niente usa il CD-Text o ti fa scrivere i dati a mano.
+- **Ricerca per nome** per i dischi non riconosciuti (tipicamente le copie masterizzate): se la ricerca automatica non trova niente chiede se cercarlo online; scrivi artista e titolo e lo cerca in contemporanea su **MusicBrainz, Deezer, Apple Music e Discogs** (gratis, senza account) e, con una API key gratuita, su **Last.fm**. I risultati arrivano man mano, ordinati per **affinità con il CD**: numero di tracce e durate traccia per traccia (±3 s), scelta automatica del disco giusto nei doppi CD, allineamento se l'album ha un'intro o bonus track in più. Accanto a ogni risultato le tracce dell'album messe di fianco a quelle del CD. Si apre anche a mano con **Cerca per nome**. Token Discogs (facoltativo) e API key Last.fm in Impostazioni → Riconoscimento del disco.
 - Lettura **veloce + verifica AccurateRip**. Se una traccia non coincide (o il disco non è nel database) la rilegge una seconda volta e poi **rilegge ostinatamente solo i settori che differiscono** finché due letture coincidono (modalità paranoia). Opzione "Paranoia sempre" per i CD rovinati.
 - **Offset del lettore rilevato da solo** alla prima estrazione di un CD presente in AccurateRip, e salvato per quel modello di lettore.
 - Salva in `Artista\Album (Anno)\01 - Titolo.ext` sulla cartella che scegli (anche unità di rete / `\\server\share`). Per le compilation: `01 - Artista - Titolo`. Per i dischi multipli: sottocartella `CD 1`, `CD 2`.
@@ -14,14 +15,14 @@ Estrazione di CD audio in **MP3, FLAC, WAV, AAC (M4A), OGG Vorbis e Opus** con r
 - Tema chiaro / scuro / come il sistema.
 
 ## Build
-Metadati: MusicBrainz, CUETools DB (MusicBrainz + Discogs + freedb) e GnuDB opzionale, tutti insieme. Impostazioni in `%APPDATA%\DiscRipper\settings.json`, salvate subito a ogni modifica (anche posizione della finestra).
+Metadati: MusicBrainz, CUETools DB (MusicBrainz + Discogs + freedb) e GnuDB opzionale, tutti insieme. Ricerca per nome (`Core/OnlineSearch.cs`): MusicBrainz, Deezer, Apple Music (iTunes Search API), Discogs, Last.fm. Impostazioni in `%APPDATA%\DiscRipper\settings.json`, salvate subito a ogni modifica (anche posizione della finestra).
 
 Ogni push su `main` → la GitHub Action compila, gira i test e pubblica da sola la release `v1.0.<n. build>` con lo zip (DiscRipper.exe self-contained + ffmpeg.exe). Si può lanciare anche a mano da Actions → Run workflow.
 
 Locale: `dotnet publish src/DiscRipper -c Release -r win-x64 --self-contained -p:PublishSingleFile=true` e metti `ffmpeg.exe` accanto all'exe.
 
 Test degli algoritmi (disc ID MusicBrainz/CDDB/AccurateRip su vettori noti, CRC AccurateRip, rilevamento offset, lettura sicura con lettore simulato):
-`dotnet run --project tests/DiscRipper.Tests` (aggiungi `--online` per provare MusicBrainz/AccurateRip dal vivo, `--encode` per codifica+tag con ffmpeg nel PATH).
+`dotnet run --project tests/DiscRipper.Tests` (aggiungi `--online` per provare MusicBrainz/AccurateRip e la ricerca per nome su tutti i portali dal vivo — `LASTFM_KEY` / `DISCOGS_TOKEN` nelle variabili d'ambiente per includere Last.fm e il token Discogs —, `--encode` per codifica+tag con ffmpeg nel PATH). I test della ricerca per nome girano anche senza rete su risposte vere salvate (`ns_*.json`).
 
 ## Impostazioni
 Salvate in `%APPDATA%\DiscRipper\settings.json`.

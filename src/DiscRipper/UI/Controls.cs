@@ -80,7 +80,7 @@ public class Card : Panel
     }
 }
 
-public enum Glyph { None, Disc, Eject, Settings, Theme, Search, Folder, Rip, Stop, FolderOpen }
+public enum Glyph { None, Disc, Eject, Settings, Theme, Search, Folder, Rip, Stop, FolderOpen, Web }
 
 /// <summary>Pulsante piatto disegnato a mano: altezza fissa, icona vettoriale, testo centrato.</summary>
 public class FlatButton : Button, IThemed
@@ -232,6 +232,11 @@ public class FlatButton : Button, IThemed
                 g.DrawLine(pen, cx, y + 1, cx, y + 10);
                 g.DrawLines(pen, new[] { new PointF(cx - 4, y + 6.5f), new PointF(cx, y + 10.5f), new PointF(cx + 4, y + 6.5f) });
                 g.DrawLines(pen, new[] { new PointF(x + 1.5f, y + 10), new PointF(x + 1.5f, y + h - 1.5f), new PointF(x + w - 1.5f, y + h - 1.5f), new PointF(x + w - 1.5f, y + 10) });
+                break;
+            case Glyph.Web: // mappamondo: cerca online
+                g.DrawEllipse(pen, x + 1.5f, y + 1.5f, w - 3, h - 3);
+                g.DrawEllipse(pen, cx - 3.2f, y + 1.5f, 6.4f, h - 3);
+                g.DrawLine(pen, x + 1.5f, cy, x + w - 1.5f, cy);
                 break;
             case Glyph.Stop:
                 using (var path = Theme.Rounded(new Rectangle(3, 3, 10, 10), 2))

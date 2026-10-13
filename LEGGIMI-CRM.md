@@ -14,5 +14,7 @@ il blocco **Riversaggio / Backup** della scheda del cliente, quando il supporto 
 - Nella Coda del CRM compare la riga dal vivo: «📻 PC · Rossi · riversa la musicassetta 1ª di 3» / «💽 PC · Rossi · riversa il CD 1º di 2».
 - A fine lavoro (export in Tape2MP3, fine estrazione in DiscRipper): **Fatto, conta** · **Scarta** (il pezzo non si fa: il
   totale scende, il prezzo si ricalcola) · **Non contare**. Annullato o errore → non si conta niente.
+- **Cartella del cliente** (come VHSCapture): con un cliente scelto l'album va in Destinazione\«Nome Cognome»\Artista\Album (Anno),
+  la cartella del cliente si crea se non c'è. Si spegne nel ⚙ del collegamento al CRM.
 - I pezzi contano nel totale dei supporti della scheda: finiti tutti, la scheda diventa «pronta». **🔢 Conteggio** corregge fatti/totali.
 - Se la rete salta, gli eventi restano in coda su disco e partono da soli; nessun evento viene contato due volte.

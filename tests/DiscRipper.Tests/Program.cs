@@ -206,7 +206,7 @@ ReaderTest();
     {
         OutputRoot = @"\\nas\musica", Formats = OutputFormat.Mp3 | OutputFormat.Flac, Mp3Quality = "CBR 320", FlacLevel = 5,
         AacBitrate = 192, OggQuality = 8, OpusBitrate = 96, Theme = ThemeMode.Scuro, ParanoiaAlways = true, MaxRetries = 40,
-        ReadSpeed = 8, GnuDbEmail = "x@y.it", AutoReadOnInsert = false, EjectWhenDone = false, SaveCoverJpg = false, WriteLog = false,
+        ReadSpeed = 8, GnuDbEmail = "x@y.it", DiscogsToken = "tokDiscogs", LastFmApiKey = "keyLastfm", AutoReadOnInsert = false, EjectWhenDone = false, SaveCoverJpg = false, WriteLog = false,
         LastDrive = "E", WindowBounds = new[] { 10, 20, 1300, 900 }, WindowMaximized = true
     };
     a.DriveOffsets["TSSTcorp BDDVDW SE-506BB"] = 6;
@@ -214,7 +214,7 @@ ReaderTest();
     var b = AppSettings.Load();
     bool ok = b.OutputRoot == a.OutputRoot && b.Formats == a.Formats && b.Mp3Quality == "CBR 320" && b.FlacLevel == 5 && b.AacBitrate == 192
               && b.OggQuality == 8 && b.OpusBitrate == 96 && b.Theme == ThemeMode.Scuro && b.ParanoiaAlways && b.MaxRetries == 40 && b.ReadSpeed == 8
-              && b.GnuDbEmail == "x@y.it" && !b.AutoReadOnInsert && !b.EjectWhenDone && !b.SaveCoverJpg && !b.WriteLog && b.LastDrive == "E"
+              && b.GnuDbEmail == "x@y.it" && b.DiscogsToken == "tokDiscogs" && b.LastFmApiKey == "keyLastfm" && !b.AutoReadOnInsert && !b.EjectWhenDone && !b.SaveCoverJpg && !b.WriteLog && b.LastDrive == "E"
               && b.WindowBounds!.SequenceEqual(new[] { 10, 20, 1300, 900 }) && b.WindowMaximized
               && b.GetOffset("tsstcorp bddvdw se-506bb") == (6, true);
     Check("Impostazioni salvate e riaperte", ok, File.ReadAllText(path));
@@ -229,6 +229,115 @@ ReaderTest();
     var dir = PathBuilder.AlbumFolder(@"Y:\Musica", a);
     Check("Cartella", dir.Replace('\\', '/').EndsWith("AC-DC/Back in Black (1980)"), dir);
     Check("File", PathBuilder.TrackFileName(a, a.Tracks[0], 1, 10) == "01 - Hells Bells");
+}
+
+// ---- ricerca per nome (risposte vere di MusicBrainz, Deezer, Discogs salvate; iTunes e Last.fm nel formato documentato)
+{
+    int[] lo = { 0, 15537, 31691, 50866, 66466, 81202, 99409, 115920, 133093, 149847, 161560, 177682, 207106 };
+    var lady = Toc.Build(lo.Select((o, i) => (i + 1, o, i < 12)), 210385);   // Ladyhawke, 12 audio + dati
+    string F(string f) => File.ReadAllText(Dir(f));
+
+    // MusicBrainz
+    var mbIds = MusicBrainzClient.PickSearchResults(F("ns_mb_search.json"), 12, 6);
+    using (var sd = System.Text.Json.JsonDocument.Parse(F("ns_mb_search.json")))
+    {
+        var byId = sd.RootElement.GetProperty("releases").EnumerateArray().ToDictionary(r => r.GetProperty("id").GetString()!, r => r);
+        int Count(string id) => byId[id].GetProperty("media").EnumerateArray().Max(m => m.GetProperty("track-count").GetInt32());
+        string Fmt(string id) => string.Join("+", byId[id].GetProperty("media").EnumerateArray().Select(m => m.GetProperty("format").GetString()));
+        // prima le release con 12 tracce (il CD prima del digitale), una sola per tipo: le stampe uguali di altri paesi non servono
+        Check("Nome · MusicBrainz sceglie prima le release da 12 tracce", mbIds.Count == 6 && Count(mbIds[0]) == 12 && Fmt(mbIds[0]) == "CD"
+            && Count(mbIds[1]) == 12 && mbIds.Skip(2).All(id => Count(id) != 12), string.Join(",", mbIds.Select(id => Fmt(id) + Count(id))));
+    }
+    var mbRaw = MusicBrainzClient.ParseRelease(F("ns_mb_release.json"))!;
+    var mbHit = NameMatcher.Build(mbRaw, lady, "ladyhawke", "ladyhawke");
+    Check("Nome · MusicBrainz release", mbRaw.Tracks.Count == 12 && mbRaw.Info.Year == "2008" && mbRaw.Info.MbReleaseId != null && mbRaw.Tracks.All(t => t.LengthMs > 0),
+        $"{mbRaw.Tracks.Count} {mbRaw.Info.Year}");
+    Check("Nome · MusicBrainz corrisponde al CD", mbHit.Meta.ExactMatch && mbHit.Score >= 95 && mbHit.Meta.Tracks[0].Title == "Magic" && mbHit.Meta.Tracks[11].Number == 12
+        && mbHit.TextSimilarity == 1.0 && mbHit.Meta.Tracks[0].MbRecordingId != null, $"{mbHit.Score} {mbHit.Match}");
+    Check("Nome · query MusicBrainz", MusicBrainzClient.BuildQuery("AC/DC", "Back in Black", 10, false) == @"release:(Back in Black Black~) AND artist:(AC\/DC AC\/DC~)"
+        && MusicBrainzClient.BuildQuery("Pino Daniele", "", 12, true) == "artist:(Pino Daniele Daniele~) AND tracksmedium:12",
+        MusicBrainzClient.BuildQuery("AC/DC", "Back in Black", 10, false));
+
+    // Deezer
+    var dzIds = DeezerSearch.PickSearchResults(F("ns_dz_search.json"), "Ladyhawke", "Ladyhawke", 12, 6);
+    Check("Nome · Deezer prima l'album giusto", dzIds.Count > 0 && dzIds[0] == 220277, string.Join(",", dzIds));
+    var dzRaw = DeezerSearch.Parse(F("ns_dz_album.json"), F("ns_dz_tracks.json"))!;
+    var dzHit = NameMatcher.Build(dzRaw, lady, "Ladyhawke", "Ladyhawke");
+    Check("Nome · Deezer album", dzRaw.Tracks.Count == 12 && dzRaw.Info.Year == "2008" && dzRaw.Info.Genre == "Pop" && dzRaw.Info.Label.Length > 0
+        && dzRaw.Info.CoverUrl!.Contains("1000x1000") && dzRaw.Info.Barcode == "602517801974", $"{dzRaw.Info.Year} {dzRaw.Info.Genre} {dzRaw.Info.CoverUrl}");
+    Check("Nome · Deezer durate", dzHit.Compared == 12 && dzHit.Matching >= 9 && dzHit.Score >= 90 && dzHit.Meta.Tracks[5].Title == "Love Don't Live Here", $"{dzHit.Score} {dzHit.Match}");
+
+    // Deezer, doppio CD: un CD con le durate del secondo disco di The Wall deve prendere il CD 2
+    var wall = DeezerSearch.Parse(F("ns_dz_album_wall.json"), F("ns_dz_tracks_wall.json"))!;
+    var cd2 = wall.Tracks.Where(t => t.Disc == 2).ToList();
+    int lba = 0; var starts = new List<int>();
+    foreach (var t in cd2) { starts.Add(lba); lba += (int)(t.LengthMs!.Value / 1000.0 * 75) + 20; }
+    var wallToc = Toc.Build(starts.Select((o, i) => (i + 1, o, true)), lba);
+    var wallHit = NameMatcher.Build(wall, wallToc, "Pink Floyd", "The Wall");
+    Check("Nome · doppio CD: sceglie il disco giusto", wall.Tracks.Count == 26 && wallHit.Meta.DiscNumber == 2 && wallHit.Meta.DiscTotal == 2
+        && wallHit.Meta.Tracks[0].Title == "Hey You" && wallHit.Meta.ExactMatch, $"{wallHit.Meta.DiscNumber}/{wallHit.Meta.DiscTotal} {wallHit.Match}");
+
+    // Discogs
+    var dcIds = DiscogsSearch.PickSearchResults(F("ns_dc_search.json"), "Ladyhawke", "Ladyhawke", 6);
+    Check("Nome · Discogs prima i CD", dcIds.Count == 6 && !dcIds.Contains(13691441), string.Join(",", dcIds));
+    var dcRaw = DiscogsSearch.ParseRelease(F("ns_dc_release.json"))!;
+    var dcHit = NameMatcher.Build(dcRaw, lady, "Ladyhawke", "Ladyhawke");
+    Check("Nome · Discogs release", dcRaw.Tracks.Count == 12 && dcRaw.Info.Year == "2008" && dcRaw.Info.Format == "CD" && dcRaw.Info.Label == "Modular Recordings"
+        && dcRaw.Info.Artist == "Ladyhawke", $"{dcRaw.Info.Format} {dcRaw.Info.Label} {dcRaw.Info.Artist}");
+    Check("Nome · Discogs corrisponde al CD", dcHit.Meta.ExactMatch && dcHit.Matching == 12, dcHit.Match);
+    var dcWall = DiscogsSearch.ParseRelease(F("ns_dc_wall.json"))!;
+    Check("Nome · Discogs doppio CD", dcWall.Tracks.Count == 26 && dcWall.Tracks.Count(t => t.Disc == 2) == 13 && dcWall.Info.Format == "2×CD", dcWall.Info.Format);
+    Check("Nome · Discogs posizioni", DiscogsSearch.DiscOf("1-03") == 1 && DiscogsSearch.DiscOf("2.5") == 2 && DiscogsSearch.DiscOf("CD2-05") == 2
+        && DiscogsSearch.DiscOf("A1") == 1 && DiscogsSearch.DiscOf("12") == 1 && DiscogsSearch.Duration("1:02:03") == 3723000 && DiscogsSearch.Duration("") == null
+        && DiscogsSearch.CleanName("Shake (4)") == "Shake");
+
+    // Apple Music
+    var itRaw = ITunesSearch.Parse(F("ns_it_lookup.json"))!;
+    var itHit = NameMatcher.Build(itRaw, lady, "Ladyhawke", "Ladyhawke");
+    Check("Nome · Apple Music", itRaw.Tracks.Count == 12 && itRaw.Tracks[0].Title == "Magic" && itRaw.Tracks[3].Title == "Better Than Sunday"
+        && itRaw.Info.CoverUrl!.EndsWith("/600x600bb.jpg") && itRaw.Info.Year == "2008" && itHit.Score >= 85, $"{itRaw.Info.CoverUrl} {itHit.Match}");
+
+    // Apple Music, ricerca vera nel negozio italiano: l'album omonimo non c'è → va cercato anche nel negozio americano
+    var itJson = F("ns_it_search_it.json");
+    var itIds = ITunesSearch.PickSearchResults(itJson, "Ladyhawke", "Ladyhawke", 12, 6);
+    long[] singoli = { 1444404216, 1845919416, 1554819686, 1490219828, 1473579249, 1123066719 };
+    Check("Nome · Apple Music: niente singoli, prima i nomi simili", itIds.Count == 6 && !itIds.Any(singoli.Contains)
+        && new long[] { 1090015130, 1587690241, 1443811352 }.All(itIds.Contains), string.Join(",", itIds));
+    Check("Nome · Apple Music: negozio IT senza l'album → prova anche US", !ITunesSearch.HasGoodCandidate(itJson, "Ladyhawke", "Ladyhawke", 12)
+        && ITunesSearch.HasGoodCandidate(itJson, "Ladyhawke", "Wild Things", 11));
+
+    // Last.fm
+    using (var ld = System.Text.Json.JsonDocument.Parse(F("ns_lastfm_album.json")))
+    {
+        var lfRaw = LastFmSearch.ParseAlbum(ld.RootElement)!;
+        Check("Nome · Last.fm", lfRaw.Tracks.Count == 12 && lfRaw.Tracks[0].Title == "Magic" && lfRaw.Tracks[4].LengthMs == null && lfRaw.Info.Genre == "Electronic"
+            && lfRaw.Info.CoverUrl != null, string.Join("|", lfRaw.Tracks.Select(t => t.Title)));
+    }
+    using (var ld = System.Text.Json.JsonDocument.Parse("{\"album\":{\"artist\":\"X\",\"name\":\"Y\",\"tags\":\"\",\"image\":[],\"tracks\":{\"track\":{\"name\":\"Unica\",\"duration\":180,\"@attr\":{\"rank\":\"1\"},\"artist\":{\"name\":\"X\"}}}}}"))
+    {
+        var one = LastFmSearch.ParseAlbum(ld.RootElement)!;
+        Check("Nome · Last.fm traccia singola (oggetto, non elenco)", one.Tracks.Count == 1 && one.Tracks[0].LengthMs == 180000 && one.Info.Genre == "");
+    }
+    using (var ld = System.Text.Json.JsonDocument.Parse(F("ns_lastfm_search.json")))
+    {
+        var pairs = LastFmSearch.PickSearchResults(ld.RootElement, "Ladyhawke", 5);
+        Check("Nome · Last.fm prima l'artista cercato, senza doppioni", pairs.Count == 2 && pairs[0].artist == "Ladyhawke", string.Join(",", pairs));
+    }
+
+    // allineamento: risultato con un'intro in più all'inizio e una bonus track in fondo
+    var extra = new RawRelease { Info = new AlbumMeta { Source = "Prova", Artist = "A", Album = "B" } };
+    extra.Tracks.Add(new RawTrack { Title = "Intro", LengthMs = 30000 });
+    foreach (var t in mbRaw.Tracks) extra.Tracks.Add(new RawTrack { Title = t.Title, LengthMs = t.LengthMs });
+    extra.Tracks.Add(new RawTrack { Title = "Bonus", LengthMs = 200000 });
+    var exHit = NameMatcher.Build(extra, lady);
+    Check("Nome · allinea saltando l'intro", exHit.Offset == 1 && exHit.Meta.Tracks[0].Title == "Magic" && exHit.Matching == 12 && !exHit.Meta.ExactMatch
+        && exHit.Match.Contains("14 tracce"), exHit.Match);
+    var few = new RawRelease { Info = new AlbumMeta { Source = "Prova" } };
+    few.Tracks.Add(new RawTrack { Title = "Solo questa" });
+    var fewHit = NameMatcher.Build(few, lady);
+    Check("Nome · risultato con meno tracce", fewHit.Meta.Tracks.Count == 12 && fewHit.Meta.Tracks[1].Title == "Traccia 02" && fewHit.Score < 20, $"{fewHit.Score} {fewHit.Match}");
+    Check("Nome · somiglianza testi", NameMatcher.Similarity("pino daniele", "nero a meta", "Pino Daniele", "Nero a metà") == 1.0
+        && NameMatcher.Similarity("Ladyhawke", "Ladyhawke", "Crooked Colours", "Never Dance Alone (feat. Ladyhawke)") < 0.3);
 }
 
 // ---- codifica + tag (richiede ffmpeg nel PATH)
@@ -300,6 +409,29 @@ if (args.Contains("--online"))
         foreach (var r in ct) Console.WriteLine("     " + r.Display + " | cover: " + (r.CoverUrl ?? "-"));
     }
     catch (Exception ex) { Console.WriteLine("     CUETools DB non raggiungibile: " + ex.Message); }
+
+    // ricerca per nome dal vivo (Apple a volte rifiuta le richieste dai server: lì conta come avviso, non come errore)
+    {
+        int[] lo = { 0, 15537, 31691, 50866, 66466, 81202, 99409, 115920, 133093, 149847, 161560, 177682, 207106 };
+        var lady = Toc.Build(lo.Select((o, i) => (i + 1, o, i < 12)), 210385);
+        var settings = new AppSettings { LastFmApiKey = Environment.GetEnvironmentVariable("LASTFM_KEY") ?? "", DiscogsToken = Environment.GetEnvironmentVariable("DISCOGS_TOKEN") ?? "" };
+        foreach (var portal in NameSearchPortals.All(http, settings))
+        {
+            if (!portal.Available) { Console.WriteLine($"     {portal.Name}: saltato ({portal.Hint})"); continue; }
+            var hits = new List<SearchHit>();
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                int n = await portal.Create().SearchAsync("Ladyhawke", "Ladyhawke", 12, r => hits.Add(NameMatcher.Build(r, lady, "Ladyhawke", "Ladyhawke")), CancellationToken.None);
+                var best = hits.OrderByDescending(h => h.Rank).FirstOrDefault();
+                Check($"{portal.Name} ricerca per nome live", n > 0 && best != null && best.Score >= 80, best?.Match ?? "nessun risultato");
+                foreach (var h in hits.OrderByDescending(h => h.Rank).Take(3))
+                    Console.WriteLine($"     {h.Score,3} {h.Meta.Display} | {h.Match} | cover: {(h.Meta.CoverUrl ?? h.Meta.MbReleaseId ?? "-")}  ({sw.Elapsed.TotalSeconds:0.0}s)");
+            }
+            catch (PortalException ex) when (portal.Name == "Apple Music") { Console.WriteLine("     AVVISO " + ex.Message); }
+            catch (Exception ex) { Check($"{portal.Name} ricerca per nome live", false, ex.Message); }
+        }
+    }
 }
 
 Console.WriteLine(fails == 0 ? "\nTUTTI I TEST OK" : $"\n{fails} TEST FALLITI");

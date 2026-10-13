@@ -18,6 +18,8 @@ public sealed class RipJob
     public byte[]? Cover { get; init; }
     public ArDisc? Ar { get; init; }
     public bool ArLookupFailed { get; init; }
+    /// <summary>Cartella del cliente del CRM («Nome Cognome»): l'album va in Destinazione\Cliente\Artista\Album. Null = niente.</summary>
+    public string? ClientFolder { get; init; }
 
     public string AlbumDir { get; private set; } = "";
     int _errors;
@@ -48,7 +50,9 @@ public sealed class RipJob
         if (string.IsNullOrWhiteSpace(s.OutputRoot)) throw new InvalidOperationException("Cartella di destinazione non impostata.");
         if (!Directory.Exists(s.OutputRoot))
             throw new InvalidOperationException($"La destinazione \"{s.OutputRoot}\" non è raggiungibile (unità di rete scollegata?).");
-        AlbumDir = PathBuilder.AlbumFolder(s.OutputRoot, Meta);
+        string root = s.OutputRoot;
+        if (!string.IsNullOrWhiteSpace(ClientFolder)) root = Path.Combine(root, PathBuilder.Clean(ClientFolder));
+        AlbumDir = PathBuilder.AlbumFolder(root, Meta);
         Directory.CreateDirectory(AlbumDir);
         string tempDir = Path.Combine(Path.GetTempPath(), "DiscRipper", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
@@ -57,6 +61,7 @@ public sealed class RipJob
         Log($"Lettore: {DriveInfo}");
         Log($"Album: {Meta.Artist} — {Meta.Album}{(Meta.Year.Length > 0 ? $" ({Meta.Year})" : "")}  [fonte: {Meta.Source}]");
         Log($"MusicBrainz disc ID: {Toc.MusicBrainzDiscId()}   CDDB: {Toc.CddbDiscId():x8}");
+        if (!string.IsNullOrWhiteSpace(ClientFolder)) Log($"Cliente: {ClientFolder} (cartella del cliente)");
         Log($"Destinazione: {AlbumDir}");
         Log($"Formati: {string.Join(", ", formats.Select(FormatInfo.Label))}");
 

@@ -23,6 +23,7 @@ public sealed class MainForm : Form
     readonly CoverBox _cover = new() { Size = Ui.Sz(160, 160), Cursor = Cursors.Hand, AllowDrop = true };
     readonly ThemedCombo _candidates = new();
     readonly FlatButton _btnLookup = new() { Text = "Cerca di nuovo", Icon = Glyph.Search };
+    readonly FlatButton _btnByName = new() { Text = "Cerca per nome", Icon = Glyph.Web };
     readonly FieldBox _artist = new();
     readonly FieldBox _album = new();
     readonly FieldBox _year = new() { Width = Ui.S(80) };
@@ -55,6 +56,8 @@ public sealed class MainForm : Form
     bool _arFailed;
     byte[]? _coverBytes;
     readonly Dictionary<string, byte[]?> _coverCache = new();
+    /// <summary>Album scelti con la ricerca per nome: restano nell'elenco «Trovato» anche se si rifà la ricerca automatica.</summary>
+    readonly HashSet<AlbumMeta> _byName = new();
     CancellationTokenSource? _lookupCts, _ripCts;
     bool _busy, _ripping, _looking, _suppressCandidate, _mediaRejected;
     string? _lastAlbumDir;
@@ -75,7 +78,8 @@ public sealed class MainForm : Form
         BuildUi();
         // ── CRM: banda in alto con il cliente e i CD fatti/totali (stesso giro di VHSCapture) ──
         _crmImp.Attivo = _s.CrmAttivo; _crmImp.Url = _s.CrmUrl ?? ""; _crmImp.Token = _s.CrmToken ?? ""; _crmImp.UltimoCliente = _s.CrmUltimoCliente;
-        _crm = new CrmSessione(_crmImp, imp => { _s.CrmAttivo = imp.Attivo; _s.CrmUrl = imp.Url; _s.CrmToken = imp.Token; _s.CrmUltimoCliente = imp.UltimoCliente; _s.Save(); }, "1.1.0");
+        _crmImp.CartellaCliente = _s.CrmCartellaCliente;
+        _crm = new CrmSessione(_crmImp, imp => { _s.CrmAttivo = imp.Attivo; _s.CrmUrl = imp.Url; _s.CrmToken = imp.Token; _s.CrmUltimoCliente = imp.UltimoCliente; _s.CrmCartellaCliente = imp.CartellaCliente; _s.Save(); }, "1.2.0");
         _crmBanda = new CrmBanda(_crm, this);
         Controls.Add(_crmBanda);
         Shown += async (_, _) => { await _crm.RiprendiUltimo(); };
@@ -143,7 +147,9 @@ public sealed class MainForm : Form
             (Ui.Caption("Trovato"), SizeType.Absolute, labelW),
             (_candidates, SizeType.Percent, 100),
             (Spacer(8), SizeType.AutoSize, 0),
-            (_btnLookup, SizeType.AutoSize, 0)), 0, 0);
+            (_btnLookup, SizeType.AutoSize, 0),
+            (Spacer(8), SizeType.AutoSize, 0),
+            (_btnByName, SizeType.AutoSize, 0)), 0, 0);
         fields.Controls.Add(Ui.Row(Ui.RowH,
             (Ui.Caption("Artista"), SizeType.Absolute, labelW),
             (_artist, SizeType.Percent, 100)), 0, 1);
@@ -258,6 +264,8 @@ public sealed class MainForm : Form
         _btnRip.Click += async (_, _) => { if (_ripping) _ripCts?.Cancel(); else await Rip(); };
         _btnOpen.Click += (_, _) => { if (_lastAlbumDir != null && Directory.Exists(_lastAlbumDir)) Process.Start("explorer.exe", $"\"{_lastAlbumDir}\""); };
         _btnLookup.Click += async (_, _) => { if (_toc != null) await Lookup(_toc, true); };
+        _btnByName.Click += async (_, _) => await SearchByName(false);
+        new ToolTip().SetToolTip(_btnByName, "Cerca l'album scrivendo artista e titolo (per le copie masterizzate che la ricerca automatica non riconosce)");
         _candidates.SelectedIndexChanged += async (_, _) => { if (!_suppressCandidate) await ApplyCandidate(); };
         _drives.SelectedIndexChanged += async (_, _) =>
         {
@@ -525,6 +533,7 @@ public sealed class MainForm : Form
         _toc = null; _cdText = null; _ar = null; _arFailed = false;
         _grid.Rows.Clear();
         _suppressCandidate = true; _candidates.Items.Clear(); _suppressCandidate = false;
+        _byName.Clear();
         _artist.Text = _album.Text = _year.Text = _genre.Text = "";
         _discNo.Text = _discTot.Text = "1";
         _info.Text = _meta.Text = "";
@@ -657,8 +666,9 @@ public sealed class MainForm : Form
         catch (OperationCanceledException) { return; }
         if (ct.IsCancellationRequested || _toc != toc || _ripping) return;
 
-        // aggiorna l'elenco dei candidati: prima quelli online, poi CD-Text / manuale
-        var local = _candidates.Items.Cast<AlbumMeta>().Where(a => a.Source is "CD-Text" or "Manuale").ToList();
+        // aggiorna l'elenco dei candidati: prima quelli online, poi quelli scelti per nome, poi CD-Text / manuale
+        var local = _candidates.Items.Cast<AlbumMeta>().Where(a => _byName.Contains(a)).Concat(
+                    _candidates.Items.Cast<AlbumMeta>().Where(a => a.Source is "CD-Text" or "Manuale")).ToList();
         _suppressCandidate = true;
         _candidates.Items.Clear();
         foreach (var a in found) _candidates.Items.Add(a);
@@ -670,6 +680,40 @@ public sealed class MainForm : Form
         AppendLog(mbStatus + " · " + ArText());
         if (found.Count > 0) await ApplyCandidate();
         SetStatus(found.Count > 0 ? "Pronto: controlla i dati e premi Estrai" : "Disco non riconosciuto: inserisci i dati a mano (o usa il CD-Text)");
+
+        // non trovato (ma i servizi rispondevano): chiedo se cercarlo per nome, a ricerca finita
+        if (found.Count == 0 && !results.All(r => r.err != null) && _byName.Count == 0)
+            BeginInvoke(async () =>
+            {
+                if (_toc != toc || _ripping || _busy || !Visible) return;
+                FlashWindow();
+                var ans = MessageBox.Show(this,
+                    "Il disco non è stato trovato nei database dei CD (MusicBrainz, Discogs, freedb).\n" +
+                    "Succede spesso con le copie masterizzate: il CD non è identico all'originale.\n\n" +
+                    "Vuoi cercarlo online scrivendo artista e titolo dell'album?",
+                    "Disco non riconosciuto", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                if (ans == DialogResult.Yes) await SearchByName(true);
+            });
+    }
+
+    /// <summary>Ricerca per nome su più portali; l'album scelto va in cima all'elenco «Trovato» e riempie i campi.</summary>
+    async Task SearchByName(bool notFound)
+    {
+        var toc = _toc;
+        if (toc == null || _ripping) return;
+        static string Known(string s) => s.Trim() is "Artista sconosciuto" or "Album sconosciuto" ? "" : s.Trim();
+        using var f = new OnlineSearchForm(_http, _s, toc, Known(_artist.Text), Known(_album.Text), notFound);
+        if (f.ShowDialog(this) != DialogResult.OK || f.Chosen == null || _toc != toc || _ripping) return;
+        var a = f.Chosen;
+        _byName.Add(a);
+        _suppressCandidate = true;
+        _candidates.Items.Insert(0, a);
+        _candidates.SelectedIndex = 0;
+        _suppressCandidate = false;
+        await ApplyCandidate();
+        _meta.Text = $"Scelto per nome da {a.Source}";
+        AppendLog($"Ricerca per nome: scelto {a.Source} — {a.Artist} — {a.Album}{(a.Year.Length > 0 ? $" ({a.Year})" : "")}.");
+        SetStatus("Pronto: controlla i dati e premi Estrai");
     }
 
     string ArText() => _ar != null ? $"AccurateRip: nel database ({_ar.Pressings.Count} stamp{(_ar.Pressings.Count == 1 ? "a" : "e")})"
@@ -855,7 +899,8 @@ public sealed class MainForm : Form
             Settings = _s,
             Cover = _coverBytes,
             Ar = _ar,
-            ArLookupFailed = _arFailed
+            ArLookupFailed = _arFailed,
+            ClientFolder = _crm.CartellaCliente()      // cliente del CRM: Destinazione\Nome Cognome\Artista\Album (come VHSCapture)
         };
 
         _ripping = true;
@@ -956,6 +1001,7 @@ public sealed class MainForm : Form
         _btnEject.Enabled = !_ripping && CurrentDrive != null;
         _drives.Enabled = !_ripping;
         _btnLookup.Enabled = hasDisc && !_ripping;
+        _btnByName.Enabled = hasDisc && !_ripping;
         _btnRip.Enabled = (hasDisc && !_busy && !_looking) || _ripping;
         _btnRip.Text = _ripping ? "Annulla" : "Estrai";
         _btnRip.Accent = !_ripping;

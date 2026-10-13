@@ -12,6 +12,6 @@
     <Compile Remove="../../src/DiscRipper/Core/CrmLink.cs" />
     <PackageReference Include="TagLibSharp" Version="2.3.0" />
     <PackageReference Include="System.IO.Hashing" Version="8.0.0" />
-    <None Include="*.bin;*.txt;*.jpg;*.xml" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="*.bin;*.txt;*.jpg;*.xml;*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

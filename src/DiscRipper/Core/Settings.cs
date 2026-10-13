@@ -36,6 +36,10 @@ public sealed class AppSettings
     public int ReadSpeed { get; set; } // 0 = max
 
     public string GnuDbEmail { get; set; } = "";
+    /// <summary>Ricerca per nome: token personale Discogs (facoltativo: più richieste al minuto e copertine).</summary>
+    public string DiscogsToken { get; set; } = "";
+    /// <summary>Ricerca per nome: API key Last.fm (senza, Last.fm non viene usato).</summary>
+    public string LastFmApiKey { get; set; } = "";
     public bool AutoReadOnInsert { get; set; } = true;
     public bool EjectWhenDone { get; set; } = true;
     public bool SaveCoverJpg { get; set; } = true;
@@ -47,6 +51,8 @@ public sealed class AppSettings
     public string CrmUrl { get; set; } = "";
     public string CrmToken { get; set; } = "";
     public int CrmUltimoCliente { get; set; }
+    /// <summary>Con un cliente del CRM si salva dentro la sua cartella «Nome Cognome» (come VHSCapture).</summary>
+    public bool CrmCartellaCliente { get; set; } = true;
 
     /// <summary>Posizione e dimensione della finestra all'ultima chiusura: x, y, larghezza, altezza.</summary>
     public int[]? WindowBounds { get; set; }
